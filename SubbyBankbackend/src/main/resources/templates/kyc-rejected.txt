@@ -1,0 +1,15 @@
+Hi {{name}},
+
+We were unable to verify your identity from the documents you submitted.
+
+Reason: {{reason}}
+
+You can retry the KYC process at any time. Please make sure that:
+  • The Aadhaar and PAN images are clear and fully legible
+  • The name on both documents matches your registered name
+  • The files are in PDF, JPG, or PNG format (up to 10 MB each)
+
+If you believe this decision is incorrect, reply to this email and a member of
+our compliance team will review your case.
+
+— The Subby Bank Team

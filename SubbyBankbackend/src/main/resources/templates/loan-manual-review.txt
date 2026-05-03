@@ -1,0 +1,9 @@
+Hi {{name}},
+
+Your loan application is under manual review by our team. We typically reach
+a decision within 48 hours. You don't need to do anything right now — we'll
+email you as soon as a decision is made.
+
+Reference: {{loanAppId}}
+
+— SubbyBank

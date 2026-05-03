@@ -1,0 +1,14 @@
+Hi {{name}},
+
+Thanks for submitting your KYC documents. Our automated verification couldn't
+confirm your identity with full confidence, so a compliance reviewer will take
+a closer look.
+
+What to expect:
+  • Decision within 48 hours
+  • No action required from you — we'll reach out if we need anything
+  • Your account will be activated automatically the moment review succeeds
+
+We'll email you as soon as there's an update.
+
+— The Subby Bank Team

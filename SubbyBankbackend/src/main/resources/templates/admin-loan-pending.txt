@@ -1,0 +1,14 @@
+A loan application is waiting for an admin decision.
+
+  Loan ref:        {{loanAppId}}
+  Applicant:       {{applicantName}} (user #{{applicantUserId}})
+  Amount:          ₹{{amount}}
+  Tenure:          {{tenureMonths}} months
+  Interest rate:   {{interestRate}}% p.a.
+  ML reason:       {{reason}}
+
+Open the admin queue to approve or reject:
+
+  {{adminQueueUrl}}
+
+— SubbyBank automation

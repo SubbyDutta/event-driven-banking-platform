@@ -1,0 +1,16 @@
+Hi {{name}},
+
+Welcome to SubbyBank — your account is live.
+
+  Username: {{username}}
+
+You can sign in any time at:
+
+  {{loginUrl}}
+
+Next step: complete your KYC from the dashboard so you can open a bank
+account, top up your wallet, and apply for instant credit.
+
+If anything looks off, just reply to this email — we read every one.
+
+— SubbyBank

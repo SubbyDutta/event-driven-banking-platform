@@ -1,0 +1,31 @@
+# Minimal sidecar stack for findoc-verify.
+#
+# Host responsibilities:
+#   - Backend + all 9 workers run via `python run_local.py`
+#   - Postgres (from the findoc-ai sibling project's container, or host service)
+#   - MinIO (from the findoc-ai sibling project's container)
+#
+# This compose only provisions LocalStack, which serves SNS + SQS.
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: findoc-localstack
+    environment:
+      SERVICES: sqs,sns
+      DEFAULT_REGION: ap-south-1
+      AWS_DEFAULT_REGION: ap-south-1
+      DEBUG: "0"
+      PERSISTENCE: "1"
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  localstack-data:

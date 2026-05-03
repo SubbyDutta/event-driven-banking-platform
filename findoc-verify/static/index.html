@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>findoc-verify</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .pipe-step { flex: 1; min-width: 0; }
+    .pipe-dot { transition: all .25s; }
+    details > summary { cursor: pointer; list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before { content: "▶"; display: inline-block; margin-right: 6px; transition: transform .2s; }
+    details[open] > summary::before { transform: rotate(90deg); }
+    .kv td { padding: 3px 8px; vertical-align: top; }
+    .kv tr:nth-child(even) { background: #f8fafc; }
+    pre.mini { font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+  <header class="bg-slate-900 text-white">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-semibold tracking-tight">findoc-verify</h1>
+        <p class="text-xs text-slate-300">event-driven KYC + loan-origination document verification</p>
+      </div>
+      <nav class="text-xs text-slate-300 space-x-4">
+        <a href="http://localhost:9001" target="_blank" class="hover:text-white">MinIO console</a>
+        <a href="http://localhost:4566/_localstack/health" target="_blank" class="hover:text-white">LocalStack</a>
+        <a href="/docs" target="_blank" class="hover:text-white">API docs</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- Submit form -->
+    <section class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">1. Submit application</h2>
+      <form id="submit-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="text-sm font-medium text-slate-700">Applicant name</label>
+          <input required name="applicant_name" value="Raj Kumar" class="mt-1 w-full rounded border border-slate-300 p-2 text-sm" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-slate-700">Email</label>
+          <input required type="email" name="email" value="raj@example.com" class="mt-1 w-full rounded border border-slate-300 p-2 text-sm" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-slate-700">Phone</label>
+          <input required name="phone" value="9876543210" class="mt-1 w-full rounded border border-slate-300 p-2 text-sm" />
+        </div>
+        <div class="md:col-span-3">
+          <label class="text-sm font-medium text-slate-700">External id (optional — Java's loanAppId)</label>
+          <input name="external_id" class="mt-1 w-full rounded border border-slate-300 p-2 text-sm" placeholder="auto-generated if blank" />
+        </div>
+
+        <fieldset class="md:col-span-3 border border-slate-200 rounded p-4">
+          <legend class="text-sm font-semibold px-1">ID proof (at least one)</legend>
+          <div class="grid grid-cols-2 gap-4">
+            <label class="block text-sm">Aadhaar <input type="file" name="aadhaar" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+            <label class="block text-sm">PAN <input type="file" name="pan" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="border border-slate-200 rounded p-4">
+          <legend class="text-sm font-semibold px-1">Bank statements</legend>
+          <label class="block text-sm mb-2">Month 1 <input required type="file" name="bank_statement_1" accept=".pdf" class="mt-1 block text-xs" /></label>
+          <label class="block text-sm mb-2">Month 2 <input required type="file" name="bank_statement_2" accept=".pdf" class="mt-1 block text-xs" /></label>
+          <label class="block text-sm">Month 3 <input required type="file" name="bank_statement_3" accept=".pdf" class="mt-1 block text-xs" /></label>
+        </fieldset>
+
+        <fieldset class="border border-slate-200 rounded p-4">
+          <legend class="text-sm font-semibold px-1">Payslips</legend>
+          <label class="block text-sm mb-2">Month 1 <input required type="file" name="payslip_1" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+          <label class="block text-sm mb-2">Month 2 <input required type="file" name="payslip_2" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+          <label class="block text-sm">Month 3 <input required type="file" name="payslip_3" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+        </fieldset>
+
+        <fieldset class="border border-slate-200 rounded p-4">
+          <legend class="text-sm font-semibold px-1">Other</legend>
+          <label class="block text-sm mb-2">Employment letter <input required type="file" name="employment_letter" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+          <label class="block text-sm mb-2">ITR <input required type="file" name="itr" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+          <label class="block text-sm">Credit report <input required type="file" name="credit_report" accept=".pdf,image/*" class="mt-1 block text-xs" /></label>
+        </fieldset>
+
+        <div class="md:col-span-3 flex items-center gap-4">
+          <button type="submit" class="rounded bg-slate-900 text-white font-medium px-5 py-2 hover:bg-slate-800">Submit</button>
+          <span id="submit-status" class="text-sm text-slate-600"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- Status viewer -->
+    <section class="bg-white rounded-lg shadow p-6">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <h2 class="text-lg font-semibold">2. Pipeline status</h2>
+        <input id="app-id" class="flex-1 min-w-[260px] rounded border border-slate-300 p-2 font-mono text-xs" placeholder="paste application id" />
+        <button id="fetch-btn" class="rounded bg-slate-700 text-white px-4 py-2 text-sm">Fetch</button>
+        <button id="poll-btn" class="rounded bg-emerald-600 text-white px-4 py-2 text-sm">Start polling</button>
+      </div>
+
+      <!-- Pipeline timeline -->
+      <div id="pipeline" class="hidden mb-6">
+        <div class="flex items-center gap-1">
+          <div class="pipe-step text-center">
+            <div data-stage="submit"    class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">Submit</div>
+          </div>
+          <div class="h-[2px] bg-slate-300 flex-1"></div>
+          <div class="pipe-step text-center">
+            <div data-stage="ocr" class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">OCR</div>
+          </div>
+          <div class="h-[2px] bg-slate-300 flex-1"></div>
+          <div class="pipe-step text-center">
+            <div data-stage="classify" class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">Classify</div>
+          </div>
+          <div class="h-[2px] bg-slate-300 flex-1"></div>
+          <div class="pipe-step text-center">
+            <div data-stage="extract" class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">Extract</div>
+          </div>
+          <div class="h-[2px] bg-slate-300 flex-1"></div>
+          <div class="pipe-step text-center">
+            <div data-stage="compliance" class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">Compliance</div>
+          </div>
+          <div class="h-[2px] bg-slate-300 flex-1"></div>
+          <div class="pipe-step text-center">
+            <div data-stage="crossdoc" class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">Cross-doc</div>
+          </div>
+          <div class="h-[2px] bg-slate-300 flex-1"></div>
+          <div class="pipe-step text-center">
+            <div data-stage="fraud" class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">Fraud</div>
+          </div>
+          <div class="h-[2px] bg-slate-300 flex-1"></div>
+          <div class="pipe-step text-center">
+            <div data-stage="risk" class="pipe-dot mx-auto w-6 h-6 rounded-full bg-slate-300"></div>
+            <div class="text-[10px] mt-1">Report</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="status-panel" class="hidden space-y-6">
+        <!-- summary bar -->
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-xs text-slate-500">App:</span>
+          <code id="summary-appid" class="text-xs font-mono bg-slate-100 px-2 py-1 rounded"></code>
+          <span class="text-xs text-slate-500">External id:</span>
+          <code id="summary-extid" class="text-xs font-mono bg-slate-100 px-2 py-1 rounded"></code>
+          <span class="text-xs text-slate-500">Status:</span>
+          <span id="app-status" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-200"></span>
+          <span id="app-recommendation" class="px-3 py-1 rounded-full text-xs font-semibold"></span>
+        </div>
+
+        <!-- documents -->
+        <div>
+          <h3 class="font-semibold mb-2">Documents</h3>
+          <div id="docs-list" class="space-y-2"></div>
+        </div>
+
+        <!-- checks grids -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <h3 class="font-semibold mb-2">Compliance <span id="comp-counts" class="text-xs text-slate-500"></span></h3>
+            <div id="compliance-list" class="text-sm space-y-1"></div>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">Cross-doc <span id="cd-counts" class="text-xs text-slate-500"></span></h3>
+            <div id="crossdoc-list" class="text-sm space-y-1"></div>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">Fraud signals <span id="fr-counts" class="text-xs text-slate-500"></span></h3>
+            <div id="fraud-list" class="text-sm space-y-1"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Loan report -->
+    <section class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">3. Loan report</h2>
+      <div id="report-empty" class="text-sm text-slate-500">Report appears automatically once the risk stage completes.</div>
+      <div id="report-panel" class="hidden space-y-6">
+        <!-- headline -->
+        <div class="flex items-start gap-6 flex-wrap">
+          <div>
+            <div class="text-xs uppercase text-slate-500">Recommendation</div>
+            <div id="report-rec-badge" class="mt-1 px-4 py-2 rounded text-xl font-bold inline-block"></div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-slate-500">Overall risk score</div>
+            <div id="report-score" class="mt-1 text-2xl font-semibold"></div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-slate-500">Credit score</div>
+            <div id="report-credit" class="mt-1 text-2xl font-semibold"></div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-slate-500">DTI ratio</div>
+            <div id="report-dti" class="mt-1 text-2xl font-semibold"></div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-slate-500">Fraud score</div>
+            <div id="report-fraud" class="mt-1 text-2xl font-semibold"></div>
+          </div>
+        </div>
+
+        <!-- income breakdown -->
+        <div>
+          <h3 class="font-semibold mb-2 text-sm">Income breakdown</h3>
+          <table class="kv text-xs w-full max-w-md border border-slate-200">
+            <tbody id="report-income"></tbody>
+          </table>
+        </div>
+
+        <!-- reasons -->
+        <div id="report-reasons-wrap">
+          <h3 class="font-semibold mb-2 text-sm">Decision reasons</h3>
+          <ul id="report-reasons" class="text-sm list-disc pl-6"></ul>
+        </div>
+
+        <details>
+          <summary class="text-sm font-semibold">Full report JSON</summary>
+          <pre id="report-json" class="mt-3 text-xs bg-slate-900 text-slate-100 p-4 rounded overflow-auto max-h-[400px]"></pre>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

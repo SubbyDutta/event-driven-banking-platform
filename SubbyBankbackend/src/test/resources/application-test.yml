@@ -1,0 +1,84 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    # Postgres-compat mode so Hibernate-generated JSONB columns and reserved-word
+    # identifiers (e.g. "hour") parse on H2 without per-entity test-only overrides.
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;NON_KEYWORDS=HOUR
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+
+  sql:
+    init:
+      mode: never
+
+  # Flyway migrations target Postgres (TIMESTAMPTZ, JSONB, ON CONFLICT). The
+  # test profile runs against H2 with ddl-auto: create-drop, which generates
+  # the schema from the JPA entities — so Flyway would just get in the way.
+  flyway:
+    enabled: false
+
+  # Spring Cloud AWS needs a region / credentials / endpoint to build its
+  # SNS/SQS/S3 beans. In the test profile we don't actually hit AWS; this is
+  # just enough to satisfy the autoconfiguration wiring. LocalStack endpoint
+  # is dummy — no SQS listener is started at @SpringBootTest context load.
+  cloud:
+    aws:
+      region:
+        static: ap-south-1
+      credentials:
+        access-key: test
+        secret-key: test
+      sns:
+        endpoint: http://localhost:4566
+      sqs:
+        endpoint: http://localhost:4566
+        enabled: false
+      s3:
+        endpoint: http://localhost:4566
+        path-style-access-enabled: true
+
+  cache:
+    type: none
+
+# Disable Spring Data Redis autoconfiguration so the test doesn't try to
+# reach localhost:6379.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+security:
+  jwt:
+    secret: test-secret-test-secret-test-secret-test
+    issuer: test-issuer
+    access-token-minutes: 10
+    refresh-token-days: 1
+razorpay:
+  key-id: "rzp_test_RVPxvjAjcRvhXL"
+  secret: "QKwbfAzto7W4s4P4nZz4UkFi"
+
+fraud:
+  url: "http://localhost:5000/predict"
+
+gemini:
+  key: "AIzaSyA1fnXZgAIBfZCBf0j9F8ooQxu_XhEgNmY"
+loan:
+  url: "http://localhost:5001/predictloan"
+admin:
+  username: "ADMIN123"
+  password: "123456"
+frontend:
+  url: "http://localhost:3000/"
+
+# AES-GCM key for PiiConverter. Test-only; never used for real data.
+adharpankey:
+  key: "0123456789abcdef0123456789abcdef"   # 32 bytes / AES-256
+  fixed: "0123456789ab"                     # 12 bytes / GCM IV

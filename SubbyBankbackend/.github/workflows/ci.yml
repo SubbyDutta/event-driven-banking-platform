@@ -1,0 +1,41 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-test-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: build and test
+        run: mvn clean package
+
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+
+        run: |
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/banking-backend
+          TAG=$(git rev-parse --short HEAD)
+
+          docker build -t $IMAGE:latest -t $IMAGE:$TAG .
+          docker push $IMAGE:latest
+          docker push $IMAGE:$TAG

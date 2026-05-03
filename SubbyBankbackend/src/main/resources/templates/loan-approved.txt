@@ -1,0 +1,18 @@
+Hi {{name}},
+
+Great news — your loan application has been approved.
+
+  Loan amount:      ₹{{amount}}
+  Tenure:           {{tenureMonths}} months (fixed)
+  Interest rate:    {{interestRate}}% p.a.
+  Monthly EMI:      ₹{{monthlyEmi}}
+  First EMI due:    {{firstDueDate}}
+
+The loan amount has been credited to your account. You can view the full
+EMI schedule and pay early from your dashboard:
+
+  {{loanScheduleUrl}}
+
+Reference: {{loanAppId}}
+
+— SubbyBank

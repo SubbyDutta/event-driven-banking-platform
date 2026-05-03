@@ -1,0 +1,101 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  # MailHog (docker-compose) captures outbound mail for local smoke tests.
+  # Open http://localhost:8025 to view messages.
+  mail:
+    host: ${MAIL_HOST:mailhog}
+    port: ${MAIL_PORT:1025}
+    username:
+    password:
+    properties:
+      mail.smtp.auth: "false"
+      mail.smtp.starttls.enable: "false"
+
+  datasource:
+    # Defaults match the docker-compose shared postgres on host port 5433; override with DATABASE_URL.
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/subbybank}
+    username: ${POSTGRES_USER:subby}
+    password: ${POSTGRES_PASSWORD:subby}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Existing tables are still hibernate-managed; new tables come from Flyway migrations.
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+  cache:
+    # Use Redis so docker-compose's redis service is actually exercised locally.
+    # Set SPRING_CACHE_TYPE=caffeine to fall back to in-memory for tests/offline work.
+    type: ${SPRING_CACHE_TYPE:redis}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:ap-south-1}
+      credentials:
+        # S3-specific creds fall through to the AWS default creds if not distinct.
+        access-key: ${AWS_ACCESS_KEY_ID:test}
+        secret-key: ${AWS_SECRET_ACCESS_KEY:test}
+      sns:
+        endpoint: ${AWS_ENDPOINT_URL:http://localhost:4566}
+      sqs:
+        endpoint: ${AWS_ENDPOINT_URL:http://localhost:4566}
+      s3:
+        # S3_ENDPOINT_URL lets operators flip the S3 target independently — set it to
+        # http://minio:9000 in .env to route object storage to MinIO while SNS/SQS
+        # stay on LocalStack. Defaults to the shared AWS_ENDPOINT_URL when unset.
+        endpoint: ${S3_ENDPOINT_URL:${AWS_ENDPOINT_URL:http://localhost:4566}}
+        path-style-access-enabled: true
+
+razorpay:
+  key-id: ${RAZORPAY_KEY_ID:rzp_test_placeholder}
+  secret: ${RAZORPAY_SECRET:placeholder}
+  # Razorpay dashboard → Settings → Webhooks → "Secret". Leave empty until
+  # the webhook is wired up in the dashboard; the handler refuses to verify
+  # any inbound call when this is blank.
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+
+fraud:
+  url: ${FRAUD_ML_URL:http://localhost:8002}
+
+loan:
+  url: ${LOAN_CHECK_URL:http://localhost:8002}
+
+frontend:
+  url: ${FRONTEND_URL:http://localhost:5173}
+
+gemini:
+  key: ${GEMINI:placeholder}
+
+adharpankey:
+  key: ${MYSECRETKEY:0123456789abcdef0123456789abcdef}
+  fixed: ${FIXED:0123456789abcdef}
+
+admin:
+  username: ${ADMINUSER:admin}
+  password: ${ADMINPASSWORD:admin}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:local-dev-jwt-secret-change-me-in-prod-please-32b}
+    issuer: yourbank
+    access-token-minutes: 30
+    refresh-token-days: 30
+  actuator:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    backend.backend.messaging: DEBUG
+    io.awspring.cloud: INFO

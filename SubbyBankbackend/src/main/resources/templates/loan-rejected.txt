@@ -1,0 +1,13 @@
+Hi {{name}},
+
+Unfortunately, we are unable to approve your loan application at this time.
+
+Reason:
+  {{reason}}
+
+You may reapply after 30 days. If you believe this decision was made in
+error, please reply to this email with any supporting information.
+
+Reference: {{loanAppId}}
+
+— SubbyBank

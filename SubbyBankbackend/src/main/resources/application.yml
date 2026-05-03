@@ -1,0 +1,170 @@
+spring:
+  application:
+    name: banking-app
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 5
+      connection-timeout: 5000
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 15MB
+      max-request-size: 150MB
+  # Give in-flight work (OutboxRelay batch, @SqsListener consumers) up to 60s to
+  # finish on SIGTERM before the JVM exits. Default is 30s.
+  lifecycle:
+    timeout-per-shutdown-phase: 60s
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Existing schemas are Hibernate-managed; let Flyway coexist without rewriting history.
+    baseline-on-migrate: true
+    baseline-version: 0
+  jpa:
+    open-in-view: false
+  data:
+    redis:
+      # Redis is used only for Spring Cache here — no @RedisHash repositories. Turning off
+      # the repository scan silences the "Could not safely identify store assignment" warning
+      # the JPA OutboxEventRepository triggers at startup.
+      repositories:
+        enabled: false
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    readinessState:
+      enabled: true
+    livenessState:
+      enabled: true
+    mail:
+      # Placeholder Mailtrap creds will always fail auth; don't fail /actuator/health on it.
+      enabled: false
+
+subby:
+  s3:
+    bucket: ${SUBBY_S3_BUCKET:subby-documents}
+    presigned-ttl-seconds: 900
+    max-upload-bytes: 10485760  # 10 MB
+  topics:
+    kyc-events: subby-kyc-events
+    loan-events: subby-loan-events
+    notifications: subby-notifications
+    risk-requested: subby-risk-requested
+  queues:
+    kyc-submitted: subby-kyc-submitted
+    kyc-findoc-results: subby-kyc-findoc-results
+    kyc-decision: subby-kyc-decision
+    loan-submitted: subby-loan-submitted
+    loan-findoc-results: subby-loan-findoc-results
+    loan-risk-results: subby-loan-risk-results
+    loan-decision: subby-loan-decision
+    email-notify: subby-email-notify
+    sms-notify: subby-sms-notify
+    audit-log: subby-audit-log
+    password-reset-email: subby-password-reset-email
+    admin-loan-pending: subby-admin-loan-pending
+    admin-kyc-review: subby-admin-kyc-review
+    welcome-email: subby-welcome-email
+    transaction-email: subby-transaction-email
+    loan-disbursed-email: subby-loan-disbursed-email
+    password-changed-email: subby-password-changed-email
+  outbox:
+    poll-interval-ms: 1000
+    batch-size: 50
+    max-attempts: 10
+    max-event-payload-bytes: 204800  # 200 KB — below SNS 256 KB hard limit
+  findoc:
+    base-url: ${FINDOC_BASE_URL:http://findoc-verify:8000}
+    api-key: ${FINDOC_API_KEY:}
+    timeout-seconds: 60
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      findoc:
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+
+      # FraudPython sits on the transfer hot path. Trip faster than findoc —
+      # a hung fraud service shouldn't drag every transfer with it for long.
+      fraud:
+        slidingWindowSize: 50
+        minimumNumberOfCalls: 20
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 1500ms
+        slowCallRateThreshold: 60
+        waitDurationInOpenState: 15s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+      # Razorpay is also on the hot path (wallet topup) but external — be a
+      # touch more tolerant of transient network blips before opening.
+      razorpay:
+        slidingWindowSize: 30
+        minimumNumberOfCalls: 15
+        failureRateThreshold: 60
+        slowCallDurationThreshold: 3s
+        slowCallRateThreshold: 60
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+  bulkhead:
+    instances:
+      # Bulkhead sizing math:
+      #   Tomcat default worker threads = 200.
+      #   fraud.maxConcurrentCalls = 50  →  fraud calls can never claim more
+      #   than 25% of the Tomcat pool, so a slow FraudPython can degrade
+      #   transfer throughput but cannot starve unrelated endpoints
+      #   (login, /actuator/health, account read APIs). Same idea for
+      #   razorpay = 30 (15% ceiling). The numbers must always be < the
+      #   Tomcat max — set them based on observed p99 concurrency, not gut.
+      fraud:
+        maxConcurrentCalls: 50
+        maxWaitDuration: 100ms
+      razorpay:
+        maxConcurrentCalls: 30
+        maxWaitDuration: 200ms
+
+  retry:
+    instances:
+      fraud:
+        maxAttempts: 2
+        waitDuration: 200ms
+        retryExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
+      razorpay:
+        maxAttempts: 2
+        waitDuration: 300ms
+        # razorpay-java's RazorpayException conflates 4xx (bad request,
+        # duplicate receipt) and 5xx (server error / timeout). Retrying it
+        # blindly would replay client bugs against Razorpay. We retry only
+        # transport-level exceptions; circuit breaker handles the 5xx
+        # pattern, and 4xx fail fast as they should.
+        retryExceptions:
+          - java.io.IOException
+
+  timelimiter:
+    instances:
+      findoc:
+        timeoutDuration: 60s

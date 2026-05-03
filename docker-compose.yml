@@ -1,0 +1,314 @@
+name: subby
+
+# All services pull their config from the root-level .env file. Edit .env to
+# tune credentials, endpoints, Google Doc AI processor ids, etc. — no need to
+# touch this yaml to switch between LocalStack S3 and MinIO: flip S3_ENDPOINT_URL.
+
+x-restart: &restart
+  restart: on-failure:5
+
+services:
+
+  # -------------------------------------------------------------------------
+  # Shared Postgres cluster (both service databases in one container).
+  #   subbybank  owner=subby   → SubbyBankbackend
+  #   findoc     owner=findoc  → findoc-verify
+  # Databases + roles are created by infra/postgres-init.sql at first boot.
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: subby-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPER_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [subby-net]
+    <<: *restart
+
+  redis:
+    image: redis:7-alpine
+    container_name: subby-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [subby-net]
+    <<: *restart
+
+  # -------------------------------------------------------------------------
+  # LocalStack — SNS + SQS always; S3 optional (see S3_ENDPOINT_URL in .env).
+  # -------------------------------------------------------------------------
+  localstack:
+    # Pinned to 4.0.3 (community/CE). `:latest` resolves to Pro 2026.3.x which
+    # requires LOCALSTACK_AUTH_TOKEN and exits 55 without one. SNS -> SQS
+    # bridge verified working on 4.0.3.
+    image: localstack/localstack:4.0.3
+    container_name: subby-localstack
+    environment:
+      SERVICES: sqs,sns,s3
+      DEFAULT_REGION: ${AWS_REGION:-ap-south-1}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-ap-south-1}
+      DEBUG: "0"
+      # Persistence on LocalStack 3.8 corrupted the SNS->SQS subscription
+      # bindings across container restarts (subscriptions exist but deliver
+      # 0 messages). Run ephemeral; init scripts recreate everything on boot.
+      PERSISTENCE: "0"
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./infra/localstack-init.sh:/etc/localstack/init/ready.d/00-shared-init.sh:ro
+      - ./findoc-verify/scripts/localstack-init.sh:/etc/localstack/init/ready.d/10-findoc-init.sh:ro
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    networks: [subby-net]
+    <<: *restart
+
+  # -------------------------------------------------------------------------
+  # MinIO — S3-compatible object store. Apps talk to it via S3_ENDPOINT_URL.
+  # -------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: subby-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio12345}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    networks: [subby-net]
+    <<: *restart
+
+  # Short-lived bootstrapper that creates the shared buckets on MinIO, so the
+  # app containers can use MinIO by simply flipping S3_ENDPOINT_URL.
+  minio-setup:
+    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    container_name: subby-minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio12345}
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+        mc mb --ignore-existing local/subby-documents &&
+        mc mb --ignore-existing local/findoc-documents &&
+        echo '[minio-setup] buckets ready' &&
+        exit 0
+      "
+    networks: [subby-net]
+    restart: "no"
+
+  # -------------------------------------------------------------------------
+  # SubbyBankbackend (Java Spring Boot).
+  # -------------------------------------------------------------------------
+  subby-bank:
+    build:
+      context: ./SubbyBankbackend
+      dockerfile: Dockerfile
+    container_name: subby-bank
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    networks: [subby-net]
+    <<: *restart
+
+  # -------------------------------------------------------------------------
+  # findoc-verify (Python FastAPI + SQS workers).
+  # -------------------------------------------------------------------------
+  findoc-verify:
+    build:
+      context: ./findoc-verify
+      dockerfile: Dockerfile
+    container_name: subby-findoc-verify
+    env_file:
+      - .env
+    environment:
+      # Remap shared .env names onto findoc-verify's expected variable names.
+      DATABASE_URL: ${FINDOC_DATABASE_URL}
+      ALEMBIC_DATABASE_URL: ${FINDOC_ALEMBIC_DATABASE_URL}
+      POSTGRES_USER: ${FINDOC_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${FINDOC_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${FINDOC_POSTGRES_DB}
+    volumes:
+      # Google Document AI auth uses Application Default Credentials (ADC).
+      # The host's gcloud config is mounted read-only at the SDK's default
+      # discovery path so documentai_v1 auto-resolves credentials without
+      # needing a service-account JSON. Refresh ADC on the host with:
+      #   gcloud auth application-default login
+      - C:/Users/rever/AppData/Roaming/gcloud:/root/.config/gcloud:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [subby-net]
+    <<: *restart
+
+  # -------------------------------------------------------------------------
+  # findoc-verify workers — consumes every SQS queue in the internal pipeline
+  # (ocr / classify / extract / aggregate / compliance / cross-doc / fraud /
+  # risk / result-publisher). Without this service the API publishes events
+  # but nothing drains them, so OCR/extraction never runs.
+  # -------------------------------------------------------------------------
+  findoc-verify-workers:
+    build:
+      context: ./findoc-verify
+      dockerfile: Dockerfile
+    container_name: subby-findoc-verify-workers
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${FINDOC_DATABASE_URL}
+      ALEMBIC_DATABASE_URL: ${FINDOC_ALEMBIC_DATABASE_URL}
+      POSTGRES_USER: ${FINDOC_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${FINDOC_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${FINDOC_POSTGRES_DB}
+    volumes:
+      # Same ADC mount as the API container — the OCR worker calls Document AI.
+      - C:/Users/rever/AppData/Roaming/gcloud:/root/.config/gcloud:ro
+    command: ["python", "-m", "src.workers.run_all"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      findoc-verify:
+        condition: service_healthy
+    networks: [subby-net]
+    <<: *restart
+
+  # -------------------------------------------------------------------------
+  # SubbyPythonLoan (async SQS consumer — ML risk scoring).
+  # Consumes LoanRiskRequested from subby-risk-requests, publishes
+  # LoanRiskResult onto subby-risk-result. FastAPI is kept for /health, /metrics,
+  # and a debug /predict endpoint only.
+  # -------------------------------------------------------------------------
+  subby-python-loan:
+    build:
+      context: ./SubbyPythonLoan
+      dockerfile: Dockerfile
+    container_name: subby-python-loan
+    env_file:
+      - .env
+    environment:
+      # Remap shared .env names onto the per-service variable names Settings() expects.
+      DATABASE_URL: ${SUBBY_LOAN_DATABASE_URL}
+      ALEMBIC_DATABASE_URL: ${SUBBY_LOAN_ALEMBIC_DATABASE_URL}
+      SQS_QUEUE: ${SUBBY_LOAN_SQS_QUEUE}
+      SNS_TOPIC_RESULT: ${SUBBY_LOAN_SNS_TOPIC_RESULT}
+      MODEL_VERSION: ${SUBBY_LOAN_MODEL_VERSION}
+      POD_APPROVE_THRESHOLD: ${SUBBY_LOAN_POD_APPROVE_THRESHOLD}
+      POD_REJECT_THRESHOLD: ${SUBBY_LOAN_POD_REJECT_THRESHOLD}
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    command: >
+      bash -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks: [subby-net]
+    <<: *restart
+
+  # -------------------------------------------------------------------------
+  # FraudPython — XGBoost transaction-fraud scorer.
+  # Java's TransactionService.checkFraud calls FRAUD_ML_URL/predict for any
+  # non-system-originated transfer. BANK / RAZORPAY_TOPUP transactions skip
+  # this call (system-originated, fraud=0 by definition).
+  # -------------------------------------------------------------------------
+  fraud-python:
+    build:
+      context: ./FraudPython
+      dockerfile: Dockerfile
+    container_name: subby-fraud-python
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\", timeout=3)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [subby-net]
+    <<: *restart
+
+  # -------------------------------------------------------------------------
+  # MailHog — local SMTP sink for smoke tests. Java points at mailhog:1025,
+  # the web UI for inspecting captured mail is at http://localhost:8025.
+  # -------------------------------------------------------------------------
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: subby-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    networks: [subby-net]
+    <<: *restart
+
+volumes:
+  postgres-data:
+  localstack-data:
+  minio-data:
+
+networks:
+  subby-net:
+    name: subby-net
+    driver: bridge

@@ -1,0 +1,198 @@
+# =====================================================================
+# Subby monorepo — root .gitignore
+# Goal: never push secrets, never push large/regenerable artefacts.
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Secrets, credentials, env files
+# ---------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!*/.env.example
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.keystore
+*.jks
+application_default_credentials.json
+service-account*.json
+**/google-credentials.json
+
+# ---------------------------------------------------------------------
+# Sensitive / large fixtures (regenerable via infra/generate_fixtures.py)
+# ---------------------------------------------------------------------
+infra/fixtures/*.pdf
+infra/fixtures/*.png
+infra/fixtures/*.jpg
+infra/fixtures/*.jpeg
+**/*.pdf
+
+# ---------------------------------------------------------------------
+# Node / React / Vite
+# ---------------------------------------------------------------------
+node_modules/
+**/node_modules/
+build/
+**/build/
+dist/
+**/dist/
+.next/
+out/
+coverage/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------------------------------------------------------------------
+# Java / Maven / Gradle
+# ---------------------------------------------------------------------
+target/
+**/target/
+.mvn/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+.gradle/
+
+# ---------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+**/*.egg-info/
+.eggs/
+.installed.cfg
+develop-eggs/
+downloads/
+eggs/
+parts/
+sdist/
+wheels/
+share/python-wheels/
+*.whl
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.dmypy.json
+dmypy.json
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env-venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ---------------------------------------------------------------------
+# Docker / runtime data
+# ---------------------------------------------------------------------
+docker-volumes/
+*.pid
+*.seed
+*.pid.lock
+
+# ---------------------------------------------------------------------
+# IDEs and editors
+# ---------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+.factorypath
+.springBeans
+.sts4-cache
+.history/
+
+# ---------------------------------------------------------------------
+# OS metadata
+# ---------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------
+# Logs and local DBs
+# ---------------------------------------------------------------------
+logs/
+*.log
+*.log.*
+*.sqlite
+*.sqlite3
+*.db
+*.local
+
+# ---------------------------------------------------------------------
+# Misc local artefacts
+# ---------------------------------------------------------------------
+*.tmp
+*.bak
+*.orig
+.cache/
+tmp/
+temp/
+output.txt
+
+# ---------------------------------------------------------------------
+# Terraform / IaC (if added later)
+# ---------------------------------------------------------------------
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!example.tfvars
+
+# ---------------------------------------------------------------------
+# ML models — intentionally NOT ignored
+# Required for ML services to boot. Total footprint ~10MB.
+# These un-ignore rules override the user's GLOBAL ~/.gitignore which
+# otherwise blocks *.pkl, *.joblib, *.h5 across all repos.
+# ---------------------------------------------------------------------
+!FraudPython/model.pkl
+!FraudPython/fraud_model_xgb.pkl
+!FraudPython/model_xgb_highquality.pkl
+!SubbyPythonLoan/loan_model.pkl
+!SubbyPythonLoan/scaler.pkl
+!**/*.pkl
+!**/*.joblib
+!**/*.h5

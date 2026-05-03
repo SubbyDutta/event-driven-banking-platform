@@ -1,0 +1,14 @@
+Hi {{name}},
+
+Your loan amount has just been disbursed.
+
+  Amount:    ₹{{amount}}
+  Account:   {{accountNumberMasked}}
+  Reference: {{loanAppId}}
+
+Funds are available for use immediately. View your full repayment
+schedule and pay early from your dashboard:
+
+  {{repaymentScheduleUrl}}
+
+— SubbyBank

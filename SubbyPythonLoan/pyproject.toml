@@ -1,0 +1,51 @@
+[project]
+name = "subby-python-loan"
+version = "0.2.0"
+description = "Event-driven loan risk scoring service (SQS consumer + ML predictor)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.5.0",
+    "sqlalchemy[asyncio]>=2.0.35",
+    "alembic>=1.13.2",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "boto3>=1.35.0",
+    "botocore>=1.35.0",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "xgboost",
+    "imbalanced-learn",
+    "joblib",
+    "python-dotenv>=1.0.1",
+    "python-json-logger>=2.0.7",
+    "prometheus-client>=0.21.0",
+    "tenacity>=9.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.2",
+    "ruff>=0.6.9",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

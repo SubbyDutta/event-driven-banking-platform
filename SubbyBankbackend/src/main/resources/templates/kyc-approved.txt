@@ -1,0 +1,14 @@
+Hi {{name}},
+
+Welcome to Subby Bank — your KYC verification is complete and your account is
+now fully active. You can log in and begin transacting immediately.
+
+What's unlocked:
+  • Full balance visibility and transfers
+  • Payment and UPI features
+  • Loan and credit applications
+
+If you did not request this verification, please reply to this email or call
+our customer line at the number on the back of your card.
+
+— The Subby Bank Team

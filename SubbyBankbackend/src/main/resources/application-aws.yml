@@ -1,0 +1,78 @@
+spring:
+  config:
+    activate:
+      on-profile: aws
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_APP_PASSWORD}
+    properties:
+      mail.smtp.auth: "true"
+      mail.smtp.starttls.enable: "true"
+      mail.smtp.starttls.required: "true"
+
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+  cache:
+    type: redis
+
+  redis:
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT}
+
+  cloud:
+    aws:
+      region:
+        # No endpoint overrides — SDK resolves real AWS endpoints by region.
+        static: ${AWS_REGION:ap-south-1}
+      # Credentials come from the default provider chain (IAM role on EC2/ECS,
+      # env vars in dev, ~/.aws/credentials as fallback). Do NOT hardcode here.
+
+razorpay:
+  key-id: ${RAZORPAY_KEY_ID}
+  secret: ${RAZORPAY_SECRET}
+
+fraud:
+  url: ${FRAUD_ML_URL}
+
+loan:
+  url: ${LOAN_CHECK_URL}
+
+frontend:
+  url: ${FRONTEND_URL}
+
+gemini:
+  key: ${GEMINI}
+
+adharpankey:
+  key: ${MYSECRETKEY}
+  fixed: ${FIXED}
+
+admin:
+  username: ${ADMINUSER}
+  password: ${ADMINPASSWORD}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: yourbank
+    access-token-minutes: 30
+    refresh-token-days: 30
+  actuator:
+    enabled: false
+
+logging:
+  level:
+    root: INFO

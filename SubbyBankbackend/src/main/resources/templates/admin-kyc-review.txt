@@ -1,0 +1,12 @@
+A KYC submission needs manual review.
+
+  Applicant user:        {{applicantUsername}} (user #{{applicantUserId}})
+  Applicant email:       {{applicantEmail}}
+  findoc application:    {{findocApplicationId}}
+  Reason:                {{reason}}
+
+Open the admin queue to review:
+
+  {{adminQueueUrl}}
+
+— SubbyBank automation

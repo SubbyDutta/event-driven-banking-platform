@@ -1,0 +1,14 @@
+Hi {{name}},
+
+₹{{amount}} has been credited to your SubbyBank account.
+
+  From:           {{counterparty}}
+  Reference:      {{txnRef}}
+  Posted at:      {{occurredAt}}
+  Balance after:  ₹{{balanceAfter}}
+
+Didn't expect this transfer? Raise a dispute within 24 hours:
+
+  {{disputeUrl}}
+
+— SubbyBank

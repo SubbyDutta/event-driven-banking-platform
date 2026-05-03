@@ -1,0 +1,56 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+
+
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: none
+
+  sql:
+    init:
+      mode: never
+
+
+    cache:
+    type: caffeine
+
+
+
+
+
+
+razorpay:
+  key-id: "rzp_test_RVPxvjAjcRvhXL"
+  secret: "QKwbfAzto7W4s4P4nZz4UkFi"
+
+fraud:
+  url: "http://localhost:5000/predict"
+
+gemini:
+  key: "AIzaSyA1fnXZgAIBfZCBf0j9F8ooQxu_XhEgNmY"
+loan:
+  url: "http://localhost:5001/predictloan"
+admin:
+  username: "ADMIN123"
+  password: "123456"
+frontend:
+  url: "http://localhost:3000/"
+
+security:
+  jwt:
+    secret: "fvbkwnclslanccuruivbrwirhfvbwehibcwiuefgbwekbcakhefbwyibcsdhicdwjbw"
+    issuer: "yourbank-dev"
+    access-token-minutes: 60
+    refresh-token-days: 30
+
+

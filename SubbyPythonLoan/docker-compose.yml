@@ -1,0 +1,61 @@
+# Standalone compose for SubbyPythonLoan. Brings up Postgres + LocalStack + the
+# service itself so you can hack on risk scoring without booting the whole
+# monorepo. For full cross-service integration, use the root docker-compose.yml.
+name: subby-python-loan
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./scripts/standalone-postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: sqs,sns
+      DEFAULT_REGION: ap-south-1
+      DEBUG: "0"
+    ports:
+      - "4567:4566"
+    volumes:
+      - ./scripts/standalone-localstack-init.sh:/etc/localstack/init/ready.d/00-init.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  subby-python-loan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://subbyloan:subbyloan@postgres:5432/subby_loan
+      ALEMBIC_DATABASE_URL: postgresql+psycopg2://subbyloan:subbyloan@postgres:5432/subby_loan
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: ap-south-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_QUEUE: subby-risk-requests
+      SNS_TOPIC_RESULT: subby-risk-result
+      MODEL_VERSION: v1.0.0
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    command: >
+      bash -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"
