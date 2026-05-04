@@ -134,19 +134,18 @@ public class FraudClient {
      */
     @SuppressWarnings("unused")
     private FraudCheckResult fallback(Transaction transaction, Throwable t) {
-        boolean lowRisk = transaction.getAmount() <= 10_000.0
-                && transaction.getIsForeign() == 0
-                && transaction.getIsHighRisk() == 0;
+        boolean foreignOrHigh = transaction.getIsForeign() == 1
+                || transaction.getIsHighRisk() == 1;
 
-        if (lowRisk) {
-            log.warn("fraud-python unavailable; allowing low-risk transfer in DEGRADED mode (amount={}, cause={})",
+        if (foreignOrHigh) {
+            log.error("fraud-python unavailable; rejecting foreign/high-risk transfer (amount={}, cause={})",
                     transaction.getAmount(), t.toString());
-            return FraudCheckResult.degraded();
+            return FraudCheckResult.unavailable(t);
         }
 
-        log.error("fraud-python unavailable; rejecting high-risk transfer (amount={}, cause={})",
+        log.warn("fraud-python unavailable; allowing transfer in DEGRADED mode (amount={}, cause={})",
                 transaction.getAmount(), t.toString());
-        return FraudCheckResult.unavailable(t);
+        return FraudCheckResult.degraded();
     }
 
     private static double toDouble(Object o) {
