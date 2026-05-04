@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { getToken, decodeToken, isTokenExpired, clearToken } from './utils/auth';
 
+// In dev, CRA's "proxy" field forwards /api → localhost:8080.
+// In production, set REACT_APP_API_URL to the full backend URL (e.g. http://EIP:8080/api).
 const API = axios.create({
-  baseURL: '/api',
+  baseURL: process.env.REACT_APP_API_URL || '/api',
   timeout: 30000,
   headers: {
     Accept: 'application/json',
