@@ -7,7 +7,7 @@ spring:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME}
-    password: ${MAIL_APP_PASSWORD}
+    password: ${MAIL_PASSWORD}
     properties:
       mail.smtp.auth: "true"
       mail.smtp.starttls.enable: "true"
@@ -21,9 +21,17 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: false
+
+  # Flyway disabled in aws profile: V2+ migrations assume Hibernate already
+  # created the base schema (users etc.). On a fresh RDS that pre-condition
+  # doesn't hold, so we let Hibernate create everything from JPA entities.
+  # If you later add Flyway-only tables not modeled as entities, write a
+  # V0__bootstrap.sql that creates them and re-enable here.
+  flyway:
+    enabled: false
 
   cache:
     type: redis
