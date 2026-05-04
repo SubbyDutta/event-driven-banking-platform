@@ -1,10 +1,4 @@
-// Humanize.tsx — turns the raw `details` JSON of compliance / cross-doc / fraud
-// rules into plain-English explanations: what was checked, what we got, why
-// it passed or failed.
-//
-// The logic is purely presentational: the data shapes mirror what the Python
-// pipeline writes into `details` (see src/pipeline/compliance.py and
-// src/pipeline/cross_doc.py).
+
 
 import type { ReactNode } from "react";
 
@@ -15,10 +9,9 @@ const safeJoin = (v: any, sep = ", "): string => {
 };
 const safeArr = <T,>(v: any): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
-// ---------------- Public titles + descriptions ----------------
 
 const TITLES: Record<string, { title: string; what: string }> = {
-  // KYC / compliance
+
   pan_format:                    { title: "PAN format check",                what: "PAN must match the IT-department format (5 letters · 4 digits · 1 letter)." },
   pan_format_category:           { title: "PAN holder category",             what: "The 4th character of a PAN encodes the holder type — must be a valid category code." },
   aadhaar_verhoeff:              { title: "Aadhaar Verhoeff checksum",       what: "Validates the 12-digit Aadhaar number using its built-in Verhoeff checksum." },
@@ -38,7 +31,7 @@ const TITLES: Record<string, { title: string; what: string }> = {
   address_consistency:           { title: "Address consistency",             what: "Addresses across documents should agree (fuzzy)." },
   ocr_quality:                   { title: "OCR text quality",                what: "OCR confidence should be high enough for reliable extraction." },
 
-  // Cross-doc
+
   name_matrix:           { title: "Cross-document name match",         what: "All sources of the applicant's name should agree (fuzzy ≥ 80%)." },
   pan_matrix:            { title: "Cross-document PAN match",          what: "PAN should be identical wherever it appears." },
   dob_matrix:            { title: "Cross-document DOB match",          what: "Date of birth should be identical across documents." },
@@ -60,7 +53,6 @@ function prettify(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ---------------- Friendly source labels ----------------
 
 const SOURCE_LABEL: Record<string, string> = {
   declared:           "Declared by applicant",
@@ -83,7 +75,6 @@ export function sourceLabel(k: string): string {
   return SOURCE_LABEL[k] ?? prettify(k);
 }
 
-// ---------------- Plain-English one-liner ----------------
 
 /**
  * Returns a single human-readable sentence summarising a rule's outcome.
@@ -197,13 +188,12 @@ export function ruleHeadline(name: string, status: string, d: any): string {
     }
   }
 
-  // Generic fallback by status
+
   if (status === "pass") return `${t}: passed.`;
   if (status === "fail") return `${t}: failed.`;
   return `${t}: warning.`;
 }
 
-// ---------------- Rich detail renderer ----------------
 
 /**
  * Renders the full structured breakdown — tables, side-by-side values, etc.
@@ -214,7 +204,6 @@ export function RuleDetails({ name, status, details }: {
 }) {
   const d = details ?? {};
 
-  // ---- Specialised renderers --------------------------------------------
 
   if (name === "name_matrix" || name === "employer_matrix") {
     const pairs = d.pairs as { a: string; b: string; score: number }[] | undefined;
@@ -433,7 +422,7 @@ export function RuleDetails({ name, status, details }: {
     );
   }
 
-  // ---- Generic fallback --------------------------------------------------
+
   const entries = Object.entries(d).filter(([, v]) => v != null && (typeof v !== "object" || (Array.isArray(v) && v.length === 0) || Object.keys(v as any).length > 0));
   if (entries.length === 0) return null;
   return (
@@ -447,7 +436,6 @@ export function RuleDetails({ name, status, details }: {
   );
 }
 
-// ---------------- Reusable building blocks ----------------
 
 function DetailWrap({ children }: { children: ReactNode }) {
   return <div className="space-y-3">{children}</div>;
@@ -560,11 +548,10 @@ function DataTable({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   );
 }
 
-// ---------------- Helpers ----------------
 
 function pct(v: number | null | undefined): string {
   if (v == null || isNaN(v)) return "—";
-  // Treat values >= 1 as percent points already (e.g. 92 = 92%), else as 0..1 ratio.
+
   const n = v <= 1 ? v * 100 : v;
   return `${Math.round(n)}%`;
 }
@@ -583,7 +570,6 @@ function fmtAny(v: any): ReactNode {
   return JSON.stringify(v);
 }
 
-// ---------------- Rejection / decision-driver aggregator ----------------
 
 export type DriverItem = { kind: "compliance" | "crossdoc" | "fraud"; name: string; status: string; severity?: string; score?: number; details: any };
 

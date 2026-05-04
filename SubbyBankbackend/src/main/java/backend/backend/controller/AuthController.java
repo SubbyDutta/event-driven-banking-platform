@@ -46,7 +46,7 @@ public class AuthController {
         return new TokenResponse(token, user.getRole());
     }
 
-    // TODO rate-limit /forgot-password (per-IP and per-email) before prod.
+
     @PreAuthorize("permitAll()")
     @PostMapping("/forgot-password")
     public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {

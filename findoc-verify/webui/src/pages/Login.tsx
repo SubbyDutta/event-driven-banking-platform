@@ -48,7 +48,7 @@ export default function Login() {
               gap: 8,
             }}
           >
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4FBA6F" }} />
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#5BB8A8" }} />
             PIPELINE LIVE
           </div>
         </div>

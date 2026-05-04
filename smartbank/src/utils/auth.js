@@ -24,7 +24,7 @@ export function clearToken() {
   try {
     localStorage.removeItem(TOKEN_KEY);
   } catch {
-    /* ignore */
+
   }
 }
 

@@ -173,7 +173,5 @@ async def test_override_republish_swaps_recommendation(monkeypatch):
     assert p["override"]["previousRecommendation"] == "reject"
     assert p["override"]["newRecommendation"] == "approve"
     assert p["override"]["actorOrg"] == "subby-admin"
-    # Dedup id differs between original and override republish — the suffix
-    # feeds into UUID5 so the output UUID must not match the plain "final" one.
     final_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"findoc/result/{app.id}/final"))
     assert published["dedup"] != final_uuid

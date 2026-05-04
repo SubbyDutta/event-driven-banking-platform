@@ -66,7 +66,7 @@ class KycIdentityGuardTest {
 
     @Test
     void pan_mismatch_rejects_hard() throws Exception {
-        // A single different PAN is sufficient — PAN is unique per person.
+
         JsonNode report = om.readTree("""
             {
               "report": {
@@ -115,7 +115,7 @@ class KycIdentityGuardTest {
 
     @Test
     void two_name_mismatches_rejects() throws Exception {
-        // Exactly the fraud vector we care about: docs for a different person.
+
         JsonNode report = om.readTree("""
             {
               "report": {
@@ -133,8 +133,8 @@ class KycIdentityGuardTest {
 
     @Test
     void middle_initial_variance_does_not_false_positive() throws Exception {
-        // "Subham K Dutta" vs "Subham Dutta" — token-set overlap is 1.0 on the
-        // min side because {subham, dutta} ⊆ {subham, k, dutta}.
+
+
         JsonNode report = om.readTree("""
             {
               "report": {

@@ -45,9 +45,6 @@ class SqsConsumer(ABC):
     def __init__(self) -> None:
         assert self.queue_name and self.worker_name, "subclass must set queue_name and worker_name"
         s = get_settings()
-        # Credentials: rely on boto3's default chain (env vars in dev for
-        # LocalStack, IAM instance role on EC2). Passing the config defaults
-        # explicitly would override the role with placeholder "test" creds.
         kwargs: dict[str, Any] = {"region_name": s.aws_region}
         if s.aws_endpoint_url:
             kwargs["endpoint_url"] = s.aws_endpoint_url

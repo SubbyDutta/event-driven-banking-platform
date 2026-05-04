@@ -9,10 +9,10 @@ import {
 } from 'recharts';
 
 const INK = '#0A0E1A';
-const ACCENT = '#1E3A2F';
+const ACCENT = '#1E3050';
 const ACCENT_2 = '#B8954A';
 const ACCENT_3 = '#8B2C2C';
-const POSITIVE = '#2D5F3F';
+const POSITIVE = '#2D6E6B';
 const RULE = '#E0DDD3';
 const RULE_SOFT = '#F2F1EC';
 const MUTED = '#6B6B63';

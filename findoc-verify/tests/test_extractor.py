@@ -16,7 +16,7 @@ def test_pan_format():
 
 
 def test_pan_no_match():
-    assert ex.extract_pan("ABCD1234F") is None  # only 4 letters before 4 digits
+    assert ex.extract_pan("ABCD1234F") is None
 
 
 def test_gross_salary_simple():

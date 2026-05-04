@@ -18,8 +18,6 @@ class S3Storage:
 
     def __init__(self) -> None:
         s = get_settings()
-        # Credentials via boto3 default chain (env in dev, IAM role on EC2).
-        # See messaging/sqs_consumer.py for why explicit keys would break prod.
         kwargs: dict[str, Any] = {
             "region_name": s.s3_region,
             "config": Config(signature_version="s3v4", s3={"addressing_style": "path"}),

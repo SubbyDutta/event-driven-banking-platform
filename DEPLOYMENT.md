@@ -3,17 +3,23 @@
 This document describes how Subby is deployed to AWS — the actual decisions,
 resources, and tradeoffs as shipped, not an aspirational plan.
 
-> **Status:** backend services deployed and CI/CD live. **Frontend is not yet
-> deployed** — see [Pending work](#pending-work).
+> **Status:** backend services + both frontends deployed and CI/CD live.
+> See [`DEPLOYMENT_JOURNAL.md`](DEPLOYMENT_JOURNAL.md) for the chronological
+> deploy log, every issue we hit, and the playbook for future updates.
 
 ---
 
 ## Topology
 
 ```
-                     ┌──────────────────────────────────────────┐
+  Browser ──→ http://<smartbank-bucket>.s3-website... (smartbank UI)
+  Browser ──→ http://<webui-bucket>.s3-website...    (findoc-verify webui)
+  Browser ──→ http://<EIP>:8080                       (bank API)
+  Browser ──→ http://<EIP>:8000                       (findoc-verify API)
+                            │
+                     ┌──────▼───────────────────────────────────┐
                      │ EC2 t3.small (Amazon Linux 2023)         │
-                     │ Elastic IP attached, 2 GB RAM + 4 GB swap│
+                     │ Elastic IP, 30 GB EBS, 2 GB RAM + swap   │
                      │                                          │
                      │  docker compose -f docker-compose.aws.yml│
                      │   ├─ subby-bank        :8080  (Java 21)  │
@@ -30,9 +36,9 @@ resources, and tradeoffs as shipped, not an aspirational plan.
                     │ RDS Postgres│  │ AWS managed services│
                     │ db.t3.micro │  │ - SNS (16 topics)   │
                     │ subbybank,  │  │ - SQS (54 queues)   │
-                    │ findoc,     │  │ - S3 (1 bucket)     │
-                    │ subby_loan  │  │ - Gmail SMTP        │
-                    │ private VPC │  │   (subhamdutta...)  │
+                    │ findoc,     │  │ - S3 (3 buckets:    │
+                    │ subby_loan  │  │   docs + 2 frontends)│
+                    │ private VPC │  │ - Gmail SMTP        │
                     └─────────────┘  └─────────────────────┘
 ```
 
@@ -51,9 +57,9 @@ resources, and tradeoffs as shipped, not an aspirational plan.
 | Redis | ✅ deployed | In-container; Spring Boot uses it for caching only. |
 | Postgres | ✅ deployed | RDS `db.t3.micro`, three DBs: `subbybank`, `findoc`, `subby_loan`. |
 | SNS topics + SQS queues | ✅ deployed | 16 topics, 27 queues + 27 DLQs, names identical to LocalStack init. |
-| `FraudPython` | ❌ **intentionally omitted** | t3.small can't fit it alongside SubbyPythonLoan. Spring Boot's `FraudClient` enters DEGRADED mode (low-value transfers allowed, high-value rejected). See [Constraints](#constraints-and-decisions). |
-| `smartbank` (React UI) | ❌ not yet deployed | Backend reachable via `http://<EIP>:8080`. Frontend deployment to S3 + CloudFront pending. |
-| `findoc-verify/webui` | ❌ not yet deployed | Same as above. |
+| `FraudPython` | ❌ **intentionally omitted** | t3.small can't fit it alongside SubbyPythonLoan. Spring Boot's `FraudClient` enters DEGRADED mode — non-flagged transfers go through, foreign/high-risk rejected. Decision documented in [Constraints](#constraints-and-decisions). |
+| `smartbank` (React UI) | ✅ deployed | S3 static website hosting on `subby-frontend-XXXX`. Built locally with `REACT_APP_API_URL=http://<EIP>:8080/api`. |
+| `findoc-verify/webui` | ✅ deployed | S3 static website hosting on `subby-findoc-webui-XXXX`. Built with `VITE_API_URL=http://<EIP>:8000`. |
 | `findoc-ai` | ❌ excluded by design | Not part of this deploy scope. |
 
 ---
@@ -346,9 +352,9 @@ After the 12-month RDS free tier expires, RDS adds ~$15/mo.
 
 In rough priority order:
 
-1. **Frontend deploy.** Build `smartbank` to static, push to S3 with website
-   hosting, optionally front with Cloudflare for HTTPS. Update `FRONTEND_URL`
-   and `FRONTEND_ORIGIN` in `.env.aws`. Same pattern for `findoc-verify/webui`.
+1. ~~Frontend deploy.~~ ✅ Done. Both frontends on S3 static website hosting.
+   See [`DEPLOYMENT_JOURNAL.md`](DEPLOYMENT_JOURNAL.md) for the build + sync
+   playbook.
 2. **HTTPS for the API.** Currently the bank API is HTTP on port 8080.
    Easiest path: Cloudflare proxy in front of an nginx reverse proxy on the
    EC2; ALB + ACM is the more "AWS-native" path but adds ~$18/mo.

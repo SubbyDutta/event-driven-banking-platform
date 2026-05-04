@@ -10,7 +10,7 @@ import { ConfirmProvider, ToastProvider } from './components/Toast'
     try {
       localStorage.setItem('findoc.apiKey', decodeURIComponent(m[1]));
     } catch {
-      // ignore
+
     }
     history.replaceState(null, '', window.location.pathname + window.location.search);
   }

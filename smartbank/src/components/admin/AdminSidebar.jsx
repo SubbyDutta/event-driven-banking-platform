@@ -29,7 +29,6 @@ const NAV_GROUPS = [
 
 function formatDisplay(name) {
   if (!name) return "Admin";
-  if (name.length > 14) return name.slice(0, 13) + "…";
   return name;
 }
 

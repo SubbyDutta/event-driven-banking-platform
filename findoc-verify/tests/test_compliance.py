@@ -5,10 +5,7 @@ import pytest
 from src.pipeline import compliance as c
 
 
-# -------- Verhoeff --------
-
 def test_verhoeff_valid_known_good():
-    # Known-valid Aadhaar from UIDAI test vectors
     assert c.verhoeff_valid("234123412346") is True
 
 
@@ -19,8 +16,6 @@ def test_verhoeff_invalid():
 def test_verhoeff_wrong_length():
     assert c.verhoeff_valid("1234") is False
 
-
-# -------- PAN format --------
 
 def test_pan_format_pass():
     app = {"documents": {"pan": {"fields": {"pan_number": "ABCPE1234F"}}}}
@@ -35,13 +30,10 @@ def test_pan_format_fail_bad_pattern():
 
 
 def test_pan_format_fail_bad_category():
-    # Z is not in allowed category letters
     app = {"documents": {"pan": {"fields": {"pan_number": "ABCZE1234F"}}}}
     r = c.check_pan_format(app)
     assert r["status"] == "fail"
 
-
-# -------- name consistency --------
 
 def test_name_pan_aadhaar_pass_fuzzy():
     app = {"documents": {
@@ -61,8 +53,6 @@ def test_name_pan_aadhaar_fail_totally_different():
     assert r["status"] == "fail"
 
 
-# -------- DOB consistency --------
-
 def test_dob_consistency_pass():
     app = {"documents": {
         "aadhaar": {"fields": {"dob": "1990-05-12"}},
@@ -79,8 +69,6 @@ def test_dob_consistency_fail():
     assert c.check_dob_consistency(app)["status"] == "fail"
 
 
-# -------- ITR PAN match --------
-
 def test_itr_pan_match_pass():
     app = {"documents": {
         "pan": {"fields": {"pan_number": "ABCPE1234F"}},
@@ -96,8 +84,6 @@ def test_itr_pan_match_fail():
     }}
     assert c.check_itr_pan_matches_id(app)["status"] == "fail"
 
-
-# -------- coverage (payslip months) --------
 
 def _payslip(m):
     return {"period_month": m.isoformat()}
@@ -117,8 +103,6 @@ def test_payslip_period_coverage_fail_missing():
     assert c.check_payslip_period_coverage(app)["status"] == "fail"
 
 
-# -------- credit score threshold --------
-
 def test_credit_score_pass():
     app = {"documents": {"credit_report": {"fields": {"credit_score": "780"}}}}
     assert c.check_credit_score_threshold(app)["status"] == "pass"
@@ -133,8 +117,6 @@ def test_credit_score_fail():
     app = {"documents": {"credit_report": {"fields": {"credit_score": "540"}}}}
     assert c.check_credit_score_threshold(app)["status"] == "fail"
 
-
-# -------- duplicate file hashes --------
 
 def test_duplicate_file_hash_fail():
     app = {"documents": {
@@ -151,8 +133,6 @@ def test_duplicate_file_hash_pass():
     }}
     assert c.check_duplicate_file_hashes(app)["status"] == "pass"
 
-
-# -------- employment letter recency --------
 
 def test_employment_letter_recent_pass():
     today = date.today()

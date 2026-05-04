@@ -24,7 +24,6 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
 
 function formatDisplay(name: string | null | undefined): string {
   if (!name) return "Operator";
-  if (name.length > 14) return name.slice(0, 13) + "…";
   return name;
 }
 

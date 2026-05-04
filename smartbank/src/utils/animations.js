@@ -3,9 +3,6 @@
  * Production-Ready, Optimized for 60fps
  */
 
-// ========================================
-// BASIC TRANSITIONS
-// ========================================
 
 export const transitions = {
   fast: {
@@ -42,9 +39,6 @@ export const transitions = {
   },
 };
 
-// ========================================
-// FADE ANIMATIONS
-// ========================================
 
 export const fadeIn = {
   initial: { opacity: 0 },
@@ -81,9 +75,6 @@ export const fadeInRight = {
   transition: transitions.slow,
 };
 
-// ========================================
-// SCALE ANIMATIONS
-// ========================================
 
 export const scaleIn = {
   initial: { opacity: 0, scale: 0.95 },
@@ -99,9 +90,6 @@ export const scaleInSpring = {
   transition: transitions.springBouncy,
 };
 
-// ========================================
-// STAGGER ANIMATIONS (for lists)
-// ========================================
 
 export const staggerContainer = {
   initial: {},
@@ -131,9 +119,6 @@ export const staggerItemLeft = {
   exit: { opacity: 0, x: -10 },
 };
 
-// ========================================
-// CARD ANIMATIONS
-// ========================================
 
 export const cardHover = {
   rest: {
@@ -178,9 +163,6 @@ export const cardPress = {
   transition: transitions.fast,
 };
 
-// ========================================
-// BUTTON ANIMATIONS
-// ========================================
 
 export const buttonHover = {
   whileHover: { scale: 1.05, y: -2 },
@@ -193,9 +175,6 @@ export const buttonPress = {
   transition: transitions.fast,
 };
 
-// ========================================
-// SLIDE ANIMATIONS
-// ========================================
 
 export const slideUp = {
   initial: { y: '100%', opacity: 0 },
@@ -225,9 +204,6 @@ export const slideRight = {
   transition: transitions.slow,
 };
 
-// ========================================
-// MODAL/OVERLAY ANIMATIONS
-// ========================================
 
 export const modalBackdrop = {
   initial: { opacity: 0 },
@@ -243,9 +219,6 @@ export const modalContent = {
   transition: transitions.slow,
 };
 
-// ========================================
-// NOTIFICATION/TOAST ANIMATIONS
-// ========================================
 
 export const toastSlideIn = {
   initial: { opacity: 0, y: -100, scale: 0.95 },
@@ -254,9 +227,6 @@ export const toastSlideIn = {
   transition: transitions.springBouncy,
 };
 
-// ========================================
-// LAYOUT ANIMATIONS
-// ========================================
 
 export const expandCollapse = {
   initial: { height: 0, opacity: 0 },
@@ -272,9 +242,6 @@ export const expandWidth = {
   transition: transitions.base,
 };
 
-// ========================================
-// PAGE TRANSITIONS
-// ========================================
 
 export const pageTransition = {
   initial: { opacity: 0, y: 20 },
@@ -290,9 +257,6 @@ export const pageSlide = {
   transition: transitions.slower,
 };
 
-// ========================================
-// ROTATE ANIMATIONS
-// ========================================
 
 export const rotateIn = {
   initial: { opacity: 0, rotate: -10, scale: 0.95 },
@@ -301,9 +265,6 @@ export const rotateIn = {
   transition: transitions.slow,
 };
 
-// ========================================
-// CUSTOM ANIMATIONS
-// ========================================
 
 export const pulse = {
   animate: {
@@ -339,9 +300,6 @@ export const shimmer = {
   },
 };
 
-// ========================================
-// UTILITY FUNCTIONS
-// ========================================
 
 /**
  * Creates a stagger animation for list items
@@ -402,7 +360,7 @@ export const gpuOptimized = {
   exit: { opacity: 0, scale: 0.95 },
   transition: {
     ...transitions.base,
-    // Force GPU acceleration
+
     transform: { type: 'spring' },
   },
 };

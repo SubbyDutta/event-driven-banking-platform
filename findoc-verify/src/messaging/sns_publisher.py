@@ -17,7 +17,6 @@ logger = get_logger(__name__)
 class SnsPublisher:
     def __init__(self) -> None:
         s = get_settings()
-        # Credentials via boto3 default chain — see sqs_consumer.py for why.
         kwargs: dict[str, Any] = {"region_name": s.aws_region}
         if s.aws_endpoint_url:
             kwargs["endpoint_url"] = s.aws_endpoint_url

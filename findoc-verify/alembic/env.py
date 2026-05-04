@@ -8,7 +8,6 @@ from pathlib import Path
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-# Make src importable
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -18,7 +17,6 @@ from src.db.models import Base  # noqa: E402
 config = context.config
 settings = get_settings()
 
-# Use sync driver URL for alembic
 db_url = os.getenv("ALEMBIC_DATABASE_URL") or settings.alembic_database_url
 config.set_main_option("sqlalchemy.url", db_url)
 

@@ -2,9 +2,9 @@
 
 **Java 21 · Spring Boot 3 · Python 3.12 · FastAPI · React 18 · PostgreSQL · Redis · AWS (SNS / SQS / S3 / EC2 / RDS / IAM) · Docker · XGBoost · Microservices · Event-Driven · CI/CD · Distributed Systems · Backend Engineer · Full-Stack · ML Engineering · Fintech**
 
-> An **event-driven polyglot microservices** banking platform — account opening, KYC, payments, internal transfers, loan origination, ML risk scoring, and live transaction-fraud detection — wired through a **transactional outbox + SNS/SQS + DLQ + idempotency** spine that survives partial failure, replicas, and replays.
+> An event-driven polyglot microservices banking platform — account opening, KYC, payments, internal transfers, loan origination, ML risk scoring, and live transaction-fraud detection. The whole thing is wired through a transactional outbox plus SNS/SQS plus DLQs plus an idempotency layer, so it keeps working when a replica dies mid-publish, when SQS redelivers the same message, or when an operator replays a queue.
 >
-> **Deployed on AWS EC2 + RDS + SNS/SQS/S3 with GitHub Actions CI/CD.** Runs end-to-end on a laptop in one `docker compose up` and migrates to real AWS by flipping a profile — **zero code changes**.
+> It runs on AWS today — EC2, RDS, SNS, SQS, S3, with GitHub Actions doing the deploys. The same code runs on a laptop with one `docker compose up`. Moving between the two is a profile flip; not a single line of business code changes.
 
 <p align="left">
   <img alt="Java" src="https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white" />
@@ -21,20 +21,6 @@
   <img alt="Document AI" src="https://img.shields.io/badge/Google%20Document%20AI-OCR-4285F4?logo=googlecloud&logoColor=white" />
   <img alt="Gemini" src="https://img.shields.io/badge/Gemini%202.0%20Flash-LLM-8E75B2?logo=google&logoColor=white" />
 </p>
-
----
-
-## Why hire me — at a glance
-
-I built this **alone**, end-to-end: backend services in two languages, two React frontends, ML training, async messaging spine, AWS deployment, and CI/CD. It is the kind of system a small team would normally split across four engineers.
-
-- **Distributed systems done right.** Transactional outbox, leased multi-replica relay, four-state idempotency claim, SQS visibility heartbeat, per-queue DLQ with redrive, schema-versioned envelopes, end-to-end correlation IDs.
-- **Production-shaped, not toy.** 16 SNS topics, 27 SQS queues + 27 DLQs, IAM instance role on EC2, RDS Postgres in a private VPC, KMS-encrypted bucket with public-access block.
-- **Polyglot by design** — Java for money-of-record, Python for ML and document intelligence — because that is the topology of real fintech stacks.
-- **Honest engineering.** Every reliability primitive has a justification in [`ARCHITECTURE.md`](ARCHITECTURE.md); every deliberate omission is documented.
-- **End-to-end verified at 93 seconds** from blank slate to an APPROVED, disbursed loan — see [`infra/DEMO.md`](infra/DEMO.md).
-
-**I am looking for backend / full-stack / distributed-systems roles.** Email at the bottom.
 
 ---
 
@@ -327,7 +313,7 @@ flowchart TB
 
 ## Engineering features that matter
 
-These are the parts a senior or staff-level reviewer cares about. Every claim links to real code.
+These are the pieces I'd want a reviewer to actually open. Every claim below points at the real file.
 
 ### 1. Transactional outbox with leased multi-replica relay
 
@@ -465,7 +451,7 @@ curl -s http://localhost:8080/actuator/prometheus | grep -E 'outbox|sqs'
 ./infra/smoke-replay-approve-to-ml.sh
 ```
 
-Walkthrough: [`infra/DEMO.md`](infra/DEMO.md). Architecture deep-dive: [`ARCHITECTURE.md`](ARCHITECTURE.md). AWS deployment: [`DEPLOYMENT.md`](DEPLOYMENT.md).
+Walkthrough: [`infra/DEMO.md`](infra/DEMO.md). Architecture deep-dive: [`ARCHITECTURE.md`](ARCHITECTURE.md). AWS deployment: [`DEPLOYMENT.md`](DEPLOYMENT.md). Full local setup (prereqs, env files, troubleshooting): [`LOCAL_SETUP.md`](LOCAL_SETUP.md).
 
 ---
 

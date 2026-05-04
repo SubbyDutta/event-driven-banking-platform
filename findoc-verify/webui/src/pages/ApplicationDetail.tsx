@@ -40,7 +40,7 @@ export default function ApplicationDetail() {
         }
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       }
-      // Default-select first doc if none active and docs exist
+
       if (!activeDocId && d.documents.length > 0) {
         setActiveDocId(d.documents[0].documentId);
       }
@@ -117,7 +117,7 @@ export default function ApplicationDetail() {
             <button
               onClick={() => setAutoRefresh(!autoRefresh)}
               className={`fv-status-pill ${autoRefresh ? "" : "muted"}`}
-              style={{ border: "1px solid", borderColor: autoRefresh ? "rgba(45,95,63,0.2)" : "var(--rule)", cursor: "pointer", background: autoRefresh ? "rgba(45,95,63,0.08)" : "var(--paper-2)" }}
+              style={{ border: "1px solid", borderColor: autoRefresh ? "rgba(45,110,107,0.2)" : "var(--rule)", cursor: "pointer", background: autoRefresh ? "rgba(45,110,107,0.08)" : "var(--paper-2)" }}
             >
               <span className="dot" />
               {autoRefresh ? "Live" : "Paused"}
@@ -141,10 +141,21 @@ export default function ApplicationDetail() {
       </div>
 
       <main className="fv-page-pad" style={{ animation: "fadeUp 240ms cubic-bezier(0.22, 1, 0.36, 1)" }}>
-        <DetailHeader d={data} report={report} onAfterReplay={() => load()} />
+        <DetailHeader
+          d={data}
+          report={report}
+          onAfterReplay={() => load()}
+          onJumpOverride={() => {
+            setFindingsTab("override");
+            requestAnimationFrame(() => {
+              const el = document.getElementById("fv-findings");
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          }}
+        />
         <PipelineTimeline d={data} />
 
-        {/* The centerpiece: 3-pane document workspace */}
+
         <DocsHeading d={data} />
         <DocWorkspace
           appId={data.applicationId}
@@ -153,7 +164,7 @@ export default function ApplicationDetail() {
           setActiveDocId={setActiveDocId}
         />
 
-        {/* Findings (compliance / cross-doc / fraud / report / override) */}
+
         <FindingsSection
           tab={findingsTab}
           setTab={setFindingsTab}
@@ -166,11 +177,9 @@ export default function ApplicationDetail() {
   );
 }
 
-// =============================================================
-// Header
-// =============================================================
-function DetailHeader({ d, report, onAfterReplay }: {
-  d: AppDetail; report: any; onAfterReplay: () => void;
+
+function DetailHeader({ d, report, onAfterReplay, onJumpOverride }: {
+  d: AppDetail; report: any; onAfterReplay: () => void; onJumpOverride: () => void;
 }) {
   const overallScore = report?.overall_score;
   const fraudScore = report?.fraud?.overall_score;
@@ -215,6 +224,20 @@ function DetailHeader({ d, report, onAfterReplay }: {
 
           <div style={{ display: "flex", gap: 12, alignItems: "stretch", flexWrap: "wrap" }}>
             <ReplayButton appId={d.applicationId} onAfterReplay={onAfterReplay} />
+            {d.hasReport && (
+              <button
+                type="button"
+                onClick={onJumpOverride}
+                className="fv-override-jump"
+                title="Jump to override panel"
+              >
+                <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 13.5V16h2.5L15 7.5 12.5 5 4 13.5Z" />
+                  <path d="M11 6.5 13.5 9" />
+                </svg>
+                Override decision
+              </button>
+            )}
             <ScoreCard
               label="Decision"
               primary={<RecBadge r={d.effectiveRecommendation} big />}
@@ -329,9 +352,7 @@ function ReplayButton({ appId, onAfterReplay }: { appId: string; onAfterReplay: 
   );
 }
 
-// =============================================================
-// Pipeline timeline
-// =============================================================
+
 function PipelineTimeline({ d }: { d: AppDetail }) {
   const anyDoc = d.documents.length > 0;
   const stages = [
@@ -399,9 +420,7 @@ function PipelineTimeline({ d }: { d: AppDetail }) {
   );
 }
 
-// =============================================================
-// Docs heading + workspace
-// =============================================================
+
 function DocsHeading({ d }: { d: AppDetail }) {
   const total = d.documents.length;
   const ocrDone = d.documents.filter(x => x.ocrDone).length;
@@ -448,14 +467,14 @@ function DocWorkspace({ appId, docs, activeDocId, setActiveDocId }: {
 
   return (
     <div className="fv-doc-workspace">
-      {/* Left rail */}
+
       <DocRail
         docs={docs}
         activeDocId={activeDoc?.documentId ?? null}
         onPick={setActiveDocId}
       />
 
-      {/* Middle stage (preview) + right fields pane (re-key on doc change to remount) */}
+
       {activeDoc && (
         <DocStageAndFields
           key={activeDoc.documentId}
@@ -530,7 +549,7 @@ function DocStageAndFields({ appId, doc }: { appId: string; doc: Doc }) {
 
     api.getDocDetails(appId, doc.documentId)
       .then((d) => { if (alive) setDet(d); })
-      .catch(() => { /* ignore */ });
+      .catch(() => {  });
 
     let url: string | null = null;
     api.getDocFile(appId, doc.documentId)
@@ -541,16 +560,15 @@ function DocStageAndFields({ appId, doc }: { appId: string; doc: Doc }) {
       })
       .catch((e: any) => {
         if (!alive) return;
-        // Backend returns 410 Gone with a useful detail when the file is
-        // missing from storage (e.g. LocalStack restart wiped the bucket).
-        // Pull the JSON detail out of the error body if present.
+
+
         const status: number | undefined = e?.status;
         const body: string = String(e?.body ?? e?.message ?? "preview unavailable");
         let detail = body;
         try {
           const parsed = JSON.parse(body);
           if (parsed?.detail) detail = String(parsed.detail);
-        } catch { /* not JSON */ }
+        } catch {  }
         if (status === 410) setPreviewErr("File no longer in storage. " + detail.replace(/^File no longer in storage: ?/i, ""));
         else if (status === 404) setPreviewErr("Document not found.");
         else setPreviewErr(detail);
@@ -672,9 +690,7 @@ function DocPreview({ url, err, filename }: { url: string | null; err: string | 
   );
 }
 
-// =============================================================
-// Right pane: extracted fields, search, edit, OCR/classification stats
-// =============================================================
+
 function DocFieldsPane({ appId, doc, det, onEdited }: {
   appId: string;
   doc: Doc;
@@ -1069,10 +1085,7 @@ function ClassifyPane({ classification }: { classification: any }) {
   );
 }
 
-// =============================================================
-// Findings section (compliance / cross-doc / fraud / report / override)
-// Tabs at the bottom — the workspace stays prominent at top.
-// =============================================================
+
 function FindingsSection({ tab, setTab, d, report, onOverride }: {
   tab: FindingsTabKey;
   setTab: (t: FindingsTabKey) => void;
@@ -1093,15 +1106,15 @@ function FindingsSection({ tab, setTab, d, report, onOverride }: {
 
   const items: { key: FindingsTabKey; label: string; n?: number }[] = [
     { key: "drivers",    label: "Decision drivers", n: hasIssues ? failures.fails.length + failures.warns.length : undefined },
+    { key: "override",   label: "Override",    n: d.overrides.length },
     { key: "compliance", label: "Compliance",  n: d.compliance.length },
     { key: "crossdoc",   label: "Cross-doc",   n: d.crossDoc.length },
     { key: "fraud",      label: "Fraud",       n: d.fraud.length },
     { key: "report",     label: "Report" },
-    { key: "override",   label: "Override",    n: d.overrides.length },
   ];
 
   return (
-    <div className="fv-panel">
+    <div className="fv-panel" id="fv-findings" style={{ scrollMarginTop: 80 }}>
       <div style={{ display: "flex", borderBottom: "1px solid var(--rule)", overflowX: "auto", padding: "0 16px" }}>
         {items.map(({ key, label, n }) => {
           const active = tab === key;
@@ -1174,7 +1187,7 @@ function DecisionDriversInline({ d, fails, warns, setTab }: {
   if (fails.length === 0 && warns.length === 0) {
     if (d.hasReport) {
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, background: "rgba(45,95,63,0.05)", border: "1px solid rgba(45,95,63,0.2)", borderRadius: 2 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, background: "rgba(45,110,107,0.05)", border: "1px solid rgba(45,110,107,0.2)", borderRadius: 2 }}>
           <span style={{ width: 36, height: 36, background: "var(--positive)", color: "var(--paper)", display: "grid", placeItems: "center", borderRadius: 2, flexShrink: 0 }}>
             <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5 10 3.5 3.5L15 7" />
@@ -1240,9 +1253,7 @@ function DriverRow({ item, setTab, severity }: { item: DriverItem; setTab: (t: F
   );
 }
 
-// =============================================================
-// Compliance / cross-doc / fraud sub-tabs
-// =============================================================
+
 function ChecksSection({ title, rows }: { title: string; rows: { name: string; status: string; details: Record<string, unknown> }[] }) {
   const counts = rows.reduce((a, r) => (a[r.status] = (a[r.status] || 0) + 1, a), {} as Record<string, number>);
   return (
@@ -1641,9 +1652,7 @@ function OverridePanel({ detail, onOverride }: { detail: AppDetail; onOverride: 
   );
 }
 
-// =============================================================
-// Skeleton + utilities
-// =============================================================
+
 function DetailSkeleton() {
   return (
     <div className="animate-fadeIn" style={{ display: "flex", flexDirection: "column", gap: 18 }}>

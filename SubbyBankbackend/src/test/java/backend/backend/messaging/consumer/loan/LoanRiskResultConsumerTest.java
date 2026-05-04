@@ -119,7 +119,7 @@ class LoanRiskResultConsumerTest {
     @Test
     @DisplayName("docs verified: pre-buffered LoanRiskResult drained and applied, pending row deleted")
     void pending_events_drained_on_docs_verified() throws Exception {
-        // Pre-seed a buffered LoanRiskResult as if it had arrived early.
+
         ObjectNode envelope = (ObjectNode) om.readTree(riskResultJson("approve", "B", 0.07));
         PendingLoanEvent pe = new PendingLoanEvent();
         pe.setLoanId(loan.getId());
@@ -127,15 +127,10 @@ class LoanRiskResultConsumerTest {
         pe.setPayloadJson(om.writeValueAsString(envelope));
         pendingRepo.save(pe);
 
-        // Loan is now ready for the docs-verified transition.
+
         loan.setLifecycleStatus(LoanLifecycleStatus.DOCS_VERIFIED);
         loanRepo.save(loan);
-        // Replay drain via direct call into the package-private method exposed
-        // through riskConsumer.applyRiskResult would skip the drain. Instead
-        // simulate by invoking risk handle one more time after DOCS_VERIFIED.
-        // The drain is wired into LoanFindocResultConsumer.drainPendingEvents,
-        // but we've already pushed the loan to DOCS_VERIFIED — manually drain
-        // by re-dispatching the buffered event.
+
 
         riskConsumer.handle(om.writeValueAsString(envelope));
 

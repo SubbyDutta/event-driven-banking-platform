@@ -26,7 +26,7 @@ def health():
 
 @app.post("/predictloan")
 def predict_loan(data: LoanRequest):
-   
+
     df = pd.DataFrame([{
         "income": data.income,
         "balance": data.balance,

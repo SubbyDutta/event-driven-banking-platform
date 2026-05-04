@@ -15,10 +15,8 @@ class LoanFinalizationServiceTest {
 
     @Test
     void emi_at_12_percent_on_500k_over_6_months_matches_standard_formula() {
-        // P = 500,000; r = 12% p.a. → 0.01/mo; n = 6.
-        // EMI = P·r·(1+r)^n / ((1+r)^n − 1)
-        //     = 500,000·0.01·1.0615201506 / 0.0615201506
-        //     ≈ 86,274.18
+
+
         double emi = LoanFinalizationService.computeEmi(
                 500_000d, new BigDecimal("12.00"), 6);
         assertEquals(86274.18, emi, 0.05, "EMI for 5L @ 12% over 6 months");
@@ -28,7 +26,7 @@ class LoanFinalizationServiceTest {
     void emi_at_10_5_percent_on_100k_over_6_months() {
         double emi = LoanFinalizationService.computeEmi(
                 100_000d, new BigDecimal("10.50"), 6);
-        // Expected ~17,156 via standard calculator
+
         assertTrue(emi > 17_100 && emi < 17_210,
                 "EMI should land near 17,156 for 1L @ 10.5% over 6 months, got " + emi);
     }

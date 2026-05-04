@@ -85,12 +85,11 @@ class LoanOriginationPipelineIT {
 
     @MockBean FindocVerifyClient findoc;
     @MockBean S3DocumentStorage storage;
-    // TransactionService.checkFraud calls an external ML endpoint — mock it
-    // so the approval path doesn't try to reach http://localhost:5000 during tests.
+
+
     @MockBean TransactionService transactionService;
-    // IdempotencyGuard uses Postgres-native ON CONFLICT which H2's PG-compat
-    // mode doesn't reliably parse. Always-claim mock is safe here — tests
-    // dispatch each event exactly once.
+
+
     @MockBean IdempotencyGuard idempotencyGuard;
 
     private Long userId;
@@ -105,8 +104,7 @@ class LoanOriginationPipelineIT {
         bankRepo.deleteAll();
         userRepo.deleteAll();
 
-        // Seed a KYC-verified user with a known PAN so the Layer-3 identity guard
-        // has ground truth to compare against.
+
         String uniq = UUID.randomUUID().toString().substring(0, 8);
         User u = new User();
         u.setUsername("subham_" + uniq);
@@ -132,7 +130,7 @@ class LoanOriginationPipelineIT {
         acct.setBalance(1_000.0);
         bankRepo.save(acct);
 
-        // Create the draft loan row the way LoanOriginationController.apply would.
+
         this.loanAppId = UUID.randomUUID().toString();
         LoanApplication loan = new LoanApplication();
         loan.setExternalId(loanAppId);
@@ -148,25 +146,23 @@ class LoanOriginationPipelineIT {
         loan.setSubmittedAt(Instant.now());
         loanRepo.save(loan);
 
-        // Default storage mock — every key returns a 1-byte dummy.
+
         when(storage.downloadBytes(ArgumentMatchers.anyString())).thenReturn(new byte[]{0x25});
 
-        // Stub the fraud checker to be a no-op returning its input.
+
         when(transactionService.checkFraud(any(Transaction.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        // Every claim succeeds — no duplicate delivery simulation in these tests.
+
         when(idempotencyGuard.claim(any(UUID.class), ArgumentMatchers.anyString())).thenReturn(true);
         when(idempotencyGuard.claim(ArgumentMatchers.anyString(), ArgumentMatchers.anyString())).thenReturn(true);
     }
 
-    // ======================================================================
-    // Scenario 1 — full happy path
-    // ======================================================================
+
     @Test
     @DisplayName("happy path: docs verified → risk band B → APPROVED with disbursement")
     void happy_path() throws Exception {
-        // findoc accepts the submission.
+
         FindocSubmitResponse submitResp = new FindocSubmitResponse();
         submitResp.setApplicationId("findoc-" + UUID.randomUUID());
         submitResp.setExternalId(loanAppId);
@@ -175,19 +171,19 @@ class LoanOriginationPipelineIT {
         submitResp.setDocumentsAccepted(9);
         when(findoc.submitLoan(any(LoanSubmitRequest.class))).thenReturn(submitResp);
 
-        // ---- Step 1: LoanApplicationSubmitted ----
+
         loanSubmittedConsumer.handle(submittedEventJson());
         LoanApplication after = loanRepo.findByExternalId(loanAppId).orElseThrow();
         assertThat(after.getLifecycleStatus()).isEqualTo(LoanLifecycleStatus.DOCS_UNDER_REVIEW);
         assertThat(after.getFindocLoanApplicationId()).isEqualTo(submitResp.getApplicationId());
 
-        // ---- Step 2: FindocLoanReportReady (clean match) ----
-        loanFindocResultConsumer.handle(findocReportJson("verified", /*cleanIdentity*/ true, /*withFail*/ false));
+
+        loanFindocResultConsumer.handle(findocReportJson("verified",  true,  false));
         after = loanRepo.findByExternalId(loanAppId).orElseThrow();
         assertThat(after.getLifecycleStatus()).isEqualTo(LoanLifecycleStatus.DOCS_VERIFIED);
         assertThat(after.getLoanReportJson()).isNotNull();
 
-        // Verify a LoanRiskRequested was staged on the outbox.
+
         List<OutboxEvent> riskReqs = outboxRepo.findAll().stream()
                 .filter(e -> "LoanRiskRequested".equals(e.getEventType()))
                 .toList();
@@ -197,54 +193,52 @@ class LoanOriginationPipelineIT {
         assertThat(riskPayload.get("tenureMonths").asInt()).isEqualTo(6);
         assertThat(riskPayload.get("features").has("credit_score")).isTrue();
 
-        // ---- Step 3: LoanRiskResult (band B, approve) ----
+
         loanRiskResultConsumer.handle(riskResultJson("approve", "B", 0.07));
         after = loanRepo.findByExternalId(loanAppId).orElseThrow();
         assertThat(after.getLifecycleStatus()).isEqualTo(LoanLifecycleStatus.PENDING_ADMIN_DECISION);
         assertThat(after.getRiskBand()).isEqualTo("B");
         assertThat(after.getInterestRate()).isEqualByComparingTo(new BigDecimal("12.00"));
 
-        // Maker-checker: ML approve must NOT publish a LoanDecisionMade.
+
         assertThat(outboxRepo.findAll().stream()
                 .noneMatch(e -> "LoanDecisionMade".equals(e.getEventType())))
                 .as("ML approve must wait for an explicit admin click")
                 .isTrue();
 
-        // ---- Step 4: admin clicks Approve → finalize via override path ----
+
         loanFinalizer.finalize(after, "APPROVED", "admin approve from pending",
                 after.getInterestRate(), "admin:test");
         after = loanRepo.findByExternalId(loanAppId).orElseThrow();
         assertThat(after.getLifecycleStatus()).isEqualTo(LoanLifecycleStatus.APPROVED);
-        assertThat(after.getStatus()).isEqualTo("APPROVED"); // legacy sync
+        assertThat(after.getStatus()).isEqualTo("APPROVED");
         assertThat(after.isApproved()).isTrue();
         assertThat(after.getMonthlyEmi()).isGreaterThan(86_000).isLessThan(87_000);
         assertThat(after.getDue_amount()).isEqualTo(Math.round(after.getMonthlyEmi() * 6 * 100) / 100.0);
         assertThat(after.getNextDueDate()).isNotNull();
 
-        // Bank account credited.
+
         BankAccount acct = bankRepo.findByUserUsername(username).orElseThrow();
         assertThat(acct.getBalance()).isEqualTo(1_000.0 + 500_000.0);
 
-        // User flags flipped.
+
         User u = userRepo.findById(userId).orElseThrow();
         assertThat(u.isHasLoan()).isTrue();
         assertThat(u.getLoanamount()).isEqualTo(500_000.0);
 
-        // Seed LoanRepayment row present.
+
         assertThat(repaymentRepo.count()).isEqualTo(1);
 
-        // LoanFinalized staged on notifications topic.
+
         assertThat(outboxRepo.findAll().stream()
                 .anyMatch(e -> "LoanFinalized".equals(e.getEventType()))).isTrue();
     }
 
-    // ======================================================================
-    // Scenario 2 — findoc hard-reject short-circuit
-    // ======================================================================
+
     @Test
     @DisplayName("findoc-reject: recommendation=rejected short-circuits BEFORE SubbyPythonLoan")
     void findoc_reject_short_circuits_ml() throws Exception {
-        // Move past submit.
+
         FindocSubmitResponse r = new FindocSubmitResponse();
         r.setApplicationId("findoc-reject-" + UUID.randomUUID());
         r.setExternalId(loanAppId);
@@ -255,21 +249,21 @@ class LoanOriginationPipelineIT {
 
         loanSubmittedConsumer.handle(submittedEventJson());
 
-        // findoc returns "rejected" with a failed compliance check.
-        loanFindocResultConsumer.handle(findocReportJson("rejected", /*cleanIdentity*/ true, /*withFail*/ true));
+
+        loanFindocResultConsumer.handle(findocReportJson("rejected",  true,  true));
 
         LoanApplication after = loanRepo.findByExternalId(loanAppId).orElseThrow();
         assertThat(after.getLifecycleStatus()).isEqualTo(LoanLifecycleStatus.DOCS_REJECTED);
         assertThat(after.getDecisionReason()).containsIgnoringCase("verification failed");
         assertThat(after.getDecidedAt()).isNotNull();
 
-        // CRITICAL: no LoanRiskRequested was staged. SubbyPythonLoan would never see this.
+
         assertThat(outboxRepo.findAll().stream()
                 .noneMatch(e -> "LoanRiskRequested".equals(e.getEventType())))
                 .as("findoc hard-reject must NOT trigger ML risk scoring")
                 .isTrue();
 
-        // A LoanDecisionMade(REJECTED) was published so the decision consumer can finalize.
+
         OutboxEvent decEvt = outboxRepo.findAll().stream()
                 .filter(e -> "LoanDecisionMade".equals(e.getEventType()))
                 .findFirst().orElseThrow();
@@ -278,11 +272,7 @@ class LoanOriginationPipelineIT {
         assertThat(payload.get("source").asText()).isEqualTo("findoc-reject");
     }
 
-    // ======================================================================
-    // Scenario 3 — Layer-3 identity-guard short-circuit
-    //   Simulates the fraud vector: user passed KYC with their own PAN,
-    //   but uploads loan docs with someone else's PAN.
-    // ======================================================================
+
     @Test
     @DisplayName("identity mismatch (layer 3): KYC PAN differs from doc PAN → hard reject, ML skipped")
     void identity_mismatch_short_circuits_ml() throws Exception {
@@ -296,10 +286,8 @@ class LoanOriginationPipelineIT {
 
         loanSubmittedConsumer.handle(submittedEventJson());
 
-        // findoc says "verified" (it didn't catch the identity swap in cross-doc)
-        // but the report contains a PAN for a different person. Layer 3 must
-        // force-reject regardless of findoc's verdict.
-        loanFindocResultConsumer.handle(findocReportJson("verified", /*cleanIdentity*/ false, /*withFail*/ false));
+
+        loanFindocResultConsumer.handle(findocReportJson("verified",  false,  false));
 
         LoanApplication after = loanRepo.findByExternalId(loanAppId).orElseThrow();
         assertThat(after.getLifecycleStatus())
@@ -307,8 +295,7 @@ class LoanOriginationPipelineIT {
                 .isEqualTo(LoanLifecycleStatus.DOCS_REJECTED);
         assertThat(after.getDecisionReason()).containsIgnoringCase("identity mismatch");
 
-        // Inspect the stored report: our Java-side enrichment must have injected
-        // an identityChecks[] block with the exact mismatch recorded.
+
         JsonNode stored = om.readTree(after.getLoanReportJson());
         assertThat(stored.has("identityChecks")).isTrue();
         assertThat(stored.get("identityChecks").isArray()).isTrue();
@@ -318,20 +305,17 @@ class LoanOriginationPipelineIT {
         assertThat(stored.get("identityChecks").get(0).get("expected").asText())
                 .isEqualTo("ABCDE1234F");
 
-        // Same critical assertion as scenario 2: NO ML scoring.
+
         assertThat(outboxRepo.findAll().stream()
                 .noneMatch(e -> "LoanRiskRequested".equals(e.getEventType())))
                 .as("identity mismatch must short-circuit before ML")
                 .isTrue();
 
-        // And no findoc.submitLoan retry / no SubbyPythonLoan interaction.
+
         verify(findoc, times(1)).submitLoan(any(LoanSubmitRequest.class));
         verifyNoMoreInteractions(findoc);
     }
 
-    // ======================================================================
-    // Event-body builders
-    // ======================================================================
 
     private String submittedEventJson() throws Exception {
         Map<String, String> s3Keys = Map.of(
@@ -387,7 +371,7 @@ class LoanOriginationPipelineIT {
         fs.put("score", 0.12);
         fs.putObject("details");
 
-        // Report body — identity fields vary by cleanIdentity flag.
+
         ObjectNode report = payload.putObject("report");
         ArrayNode docs = report.putArray("documents");
         String panInDocs = cleanIdentity ? "ABCDE1234F" : "ZZZZZ9999Z";
@@ -400,7 +384,7 @@ class LoanOriginationPipelineIT {
             extracted.put("pan", panInDocs);
             extracted.put("dob", "1998-03-15");
         }
-        // Income/credit signals so feature extractor has data.
+
         report.put("monthly_income", 65_000);
         report.put("credit_score", 780);
         report.put("annual_income", 780_000);

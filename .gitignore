@@ -16,11 +16,37 @@ secrets/
 *.key
 *.crt
 *.p12
+*.p8
+*.pkcs12
 *.keystore
 *.jks
 application_default_credentials.json
 service-account*.json
 **/google-credentials.json
+
+# SSH keypairs (any common name)
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_ecdsa
+id_ecdsa.*
+id_dsa
+id_dsa.*
+known_hosts
+authorized_keys
+
+# AWS / cloud CLI credentials
+.aws/
+**/.aws/
+credentials
+.netrc
+_netrc
+
+# Cloud one-shot bootstrap artefacts (recreate via infra/ scripts)
+bucket-policy*.json
+trust-policy*.json
+*-policy.json.local
 
 # ---------------------------------------------------------------------
 # Sensitive / large fixtures (regenerable via infra/generate_fixtures.py)
@@ -168,10 +194,27 @@ logs/
 *.tmp
 *.bak
 *.orig
+*.rej
 .cache/
 tmp/
 temp/
 output.txt
+*.dump
+*.hprof
+core
+core.*
+__MACOSX/
+
+# Local-only notes / journals (track ARCHITECTURE.md, DEPLOYMENT.md,
+# DEPLOYMENT_JOURNAL.md, README.md as normal — only the explicitly-suffixed
+# personal/transient docs are ignored)
+*.local.md
+*.local.json
+*.local.yml
+*.local.yaml
+NOTES.md
+TODO.local.md
+SCRATCH.md
 
 # ---------------------------------------------------------------------
 # Terraform / IaC (if added later)

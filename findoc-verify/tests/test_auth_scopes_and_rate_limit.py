@@ -28,8 +28,6 @@ def _reset():
     _reset_rate_limits_for_tests()
 
 
-# ---------- scopes ----------
-
 def test_empty_scopes_is_backcompat_allow_all():
     ctx = AuthContext(api_key_id=uuid.uuid4(), org_name="x", label="y", scopes=[])
     assert ctx.has_scope(SCOPE_SUBMIT) is True
@@ -55,8 +53,6 @@ def test_admin_global_grants_everything():
     assert ctx.has_scope(SCOPE_ADMIN_GLOBAL) is True
 
 
-# ---------- rate limiter ----------
-
 def test_rate_limiter_allows_below_limit():
     key = uuid.uuid4()
     for _ in range(60):
@@ -75,7 +71,6 @@ def test_rate_limiter_is_per_key():
     k2 = uuid.uuid4()
     for _ in range(60):
         _rate_limit_check(k1, 60)
-    # k1 is saturated; k2 is fresh.
     assert _rate_limit_check(k1, 60) is False
     assert _rate_limit_check(k2, 60) is True
 
@@ -94,6 +89,5 @@ def test_rate_limiter_window_drops_old_entries(monkeypatch):
         assert _rate_limit_check(key, 60) is True
     assert _rate_limit_check(key, 60) is False
 
-    # Jump 61 seconds forward — all prior entries are outside the window.
     fake_now["t"] += 61.0
     assert _rate_limit_check(key, 60) is True

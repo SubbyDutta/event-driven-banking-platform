@@ -49,6 +49,51 @@ function DashboardPanel({ setActive, transactions = [], balance = 0, accountNumb
   const recentTransactions = useMemo(() => (transactions || []).slice(0, 6), [transactions]);
   const { whole, decimal } = splitCurrency(balance);
 
+  const flowSeries = useMemo(() => {
+    const days = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      days.push({
+        key: d.toISOString().slice(0, 10),
+        date: d,
+        label: d.toLocaleDateString('en-IN', { weekday: 'short' }),
+        dayNum: d.getDate(),
+        received: 0,
+        sent: 0,
+        receivedCount: 0,
+        sentCount: 0,
+      });
+    }
+    const idx = new Map(days.map((d) => [d.key, d]));
+    (transactions || []).forEach((tx) => {
+      if (!tx.timestamp) return;
+      const dt = new Date(tx.timestamp);
+      if (Number.isNaN(dt.getTime())) return;
+      const k = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate())
+        .toISOString()
+        .slice(0, 10);
+      const slot = idx.get(k);
+      if (!slot) return;
+      const amt = Number(tx.amount) || 0;
+      if (amt >= 0) {
+        slot.received += amt;
+        slot.receivedCount += 1;
+      } else {
+        slot.sent += Math.abs(amt);
+        slot.sentCount += 1;
+      }
+    });
+    const max = days.reduce((m, d) => Math.max(m, d.received, d.sent), 0);
+    const totalReceived = days.reduce((s, d) => s + d.received, 0);
+    const totalSent = days.reduce((s, d) => s + d.sent, 0);
+    const totalReceivedCount = days.reduce((s, d) => s + d.receivedCount, 0);
+    const totalSentCount = days.reduce((s, d) => s + d.sentCount, 0);
+    return { days, max, totalReceived, totalSent, totalReceivedCount, totalSentCount };
+  }, [transactions]);
+
   const greet = (() => {
     const h = new Date().getHours();
     if (h < 12) return 'Good morning';
@@ -132,6 +177,83 @@ function DashboardPanel({ setActive, transactions = [], balance = 0, accountNumb
             <div className="arrow">→</div>
           </button>
         ))}
+      </div>
+
+      <div className="sb-panel sb-cashflow" style={{ marginBottom: 20 }}>
+        <div className="sb-panel-head">
+          <div className="title">Cash Flow · Received vs Sent</div>
+          <div className="meta">
+            <span className="sb-cashflow-legend">
+              <span className="dot rec" /> Received
+            </span>
+            <span className="sb-cashflow-legend">
+              <span className="dot sent" /> Sent
+            </span>
+            <span style={{ color: 'var(--muted)', marginLeft: 6 }}>Last 7 days</span>
+          </div>
+        </div>
+        <div className="sb-panel-body sb-cashflow-body">
+          <div className="sb-cashflow-summary">
+            <div className="cell">
+              <div className="lbl">Received</div>
+              <div className="val sb-mono rec">{formatCompact(flowSeries.totalReceived)}</div>
+              <div className="sub">
+                {flowSeries.totalReceivedCount} txn{flowSeries.totalReceivedCount === 1 ? '' : 's'}
+              </div>
+            </div>
+            <div className="cell">
+              <div className="lbl">Sent</div>
+              <div className="val sb-mono sent">{formatCompact(flowSeries.totalSent)}</div>
+              <div className="sub">
+                {flowSeries.totalSentCount} txn{flowSeries.totalSentCount === 1 ? '' : 's'}
+              </div>
+            </div>
+            <div className="cell">
+              <div className="lbl">Net</div>
+              <div
+                className={`val sb-mono ${flowSeries.totalReceived - flowSeries.totalSent >= 0 ? 'rec' : 'sent'}`}
+              >
+                {flowSeries.totalReceived - flowSeries.totalSent >= 0 ? '+' : '−'}
+                {formatCompact(Math.abs(flowSeries.totalReceived - flowSeries.totalSent))}
+              </div>
+              <div className="sub">net flow</div>
+            </div>
+          </div>
+          {flowSeries.max > 0 ? (
+            <div className="sb-cashflow-chart">
+              {flowSeries.days.map((d) => {
+                const recH = flowSeries.max > 0 ? (d.received / flowSeries.max) * 100 : 0;
+                const sentH = flowSeries.max > 0 ? (d.sent / flowSeries.max) * 100 : 0;
+                return (
+                  <div className="col" key={d.key}>
+                    <div className="bars">
+                      <div
+                        className="bar rec"
+                        style={{ height: `${recH}%` }}
+                        title={`Received ${formatCompact(d.received)} · ${d.receivedCount} txn`}
+                      />
+                      <div
+                        className="bar sent"
+                        style={{ height: `${sentH}%` }}
+                        title={`Sent ${formatCompact(d.sent)} · ${d.sentCount} txn`}
+                      />
+                    </div>
+                    <div className="lbl">
+                      <div className="day">{d.label}</div>
+                      <div className="num">{d.dayNum}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="sb-empty-state" style={{ padding: '12px 0 4px' }}>
+              <div className="icon-box">~</div>
+              <div className="msg">No flow data yet</div>
+              <div className="sub">Send or receive money to populate the 7-day chart</div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="sb-grid-2">

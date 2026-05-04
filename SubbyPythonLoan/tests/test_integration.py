@@ -171,8 +171,6 @@ def test_duplicate_event_id_yields_single_result(clean_queues):
     first_envelope = json.loads(first["Body"])
     assert first_envelope["correlationId"] == correlation_id
 
-    # Give the worker a generous window in case the second message was somehow
-    # still in flight — with idempotency it should be ACK'd without publishing.
     resp = sqs.receive_message(QueueUrl=result_q, MaxNumberOfMessages=1, WaitTimeSeconds=5)
     assert not resp.get("Messages"), "duplicate event emitted a second LoanRiskResult — idempotency broken"
 
@@ -191,7 +189,7 @@ def test_malformed_event_routes_to_dlq():
         "eventType": "LoanRiskRequested",
         "schemaVersion": 1,
         "correlationId": "bad-event",
-        "payload": {"loanAppId": "bad-event"},  # missing amountRequested + features
+        "payload": {"loanAppId": "bad-event"},
     }
     sns.publish(TopicArn=topic_arn, Message=json.dumps(event))
 

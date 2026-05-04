@@ -72,7 +72,7 @@ export default function KycPanel({ initialStatus, onApproved }) {
       setStatus(next);
       if (res.data?.reason) setReason(res.data.reason);
     } catch {
-      /* keep polling */
+
     }
   }
 

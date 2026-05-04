@@ -717,9 +717,6 @@ async def replay_pipeline(
         select(func.coalesce(func.max(PipelineRun.run_number), 0))
         .where(PipelineRun.application_id == application_id)
     )).scalar() or 0)
-    # The initial submission consumes implicit run_number=1 in worker dedup keys
-    # without inserting a PipelineRun row. Without this clamp, the first replay
-    # would also pick run_number=1 and silently SKIP_OK at every worker stage.
     next_number = max(existing_max, 1) + 1
 
     run = PipelineRun(

@@ -22,15 +22,15 @@ requested_amount = np.random.normal(loc=20000, scale=15000, size=n_samples).clip
 loan_to_income_ratio = requested_amount / (income + 1e-6)
 
 eligible = (
-    (credit_score > 500) & 
-    (balance > 3000) &      
+    (credit_score > 500) &
+    (balance > 3000) &
     (
-       
-        ((income < 20000) & (requested_amount <= 5000)) | 
-        ((income >= 20000) & (income < 30000) & (requested_amount <= 15000)) |  
+
+        ((income < 20000) & (requested_amount <= 5000)) |
+        ((income >= 20000) & (income < 30000) & (requested_amount <= 15000)) |
         ((income >= 30000) & (income < 50000) & (requested_amount <= 30000)) |
-        ((income >= 50000) & (requested_amount <= 80000)) |                     
-        ((income >= 80000) & (requested_amount <= 120000))                     
+        ((income >= 50000) & (requested_amount <= 80000)) |
+        ((income >= 80000) & (requested_amount <= 120000))
     )
 ).astype(int)
 

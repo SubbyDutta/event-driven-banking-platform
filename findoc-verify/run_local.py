@@ -21,7 +21,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
-# Load .env before importing settings-consumers.
 load_dotenv(ROOT / ".env")
 
 from src.logging_config import configure_logging, get_logger  # noqa: E402
@@ -55,7 +54,6 @@ def ensure_database_exists() -> None:
         log.error("psycopg2 not installed on host — run: pip install -e .")
         sys.exit(1)
 
-    # Connect to the default 'postgres' database to check/create target.
     try:
         conn = psycopg2.connect(
             dbname="postgres",
@@ -135,7 +133,6 @@ async def _main() -> None:
         try:
             loop.add_signal_handler(sig, _handle_sig)
         except NotImplementedError:
-            # Windows: fall back to default KeyboardInterrupt handling.
             pass
 
     worker_tasks = [

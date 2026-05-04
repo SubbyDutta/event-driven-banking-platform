@@ -202,9 +202,7 @@ class LoanFinalizationOverrideTest {
                 null, "admin:reviewer1");
         double balanceAfterFirst = bankRepo.findById(account.getId()).orElseThrow().getBalance();
 
-        // Replay: same admin source, same decision. The wasApproved guard inside
-        // reject() short-circuits because the loan is already REJECTED, so no
-        // second reversal Transaction is written.
+
         finalizer.finalize(loanRepo.findById(loan.getId()).orElseThrow(),
                 "REJECTED", "first override",
                 null, "admin:reviewer1");
@@ -222,9 +220,7 @@ class LoanFinalizationOverrideTest {
                 .as("only one reversal Transaction must exist after replay")
                 .hasSize(1);
 
-        // Also assert the controller-level idempotency contract by writing the
-        // same override row twice via the repository — the controller dedupes
-        // before save, but at the data layer we expect at most one match.
+
         LoanDecisionOverride row = new LoanDecisionOverride();
         row.setLoanApplicationId(loan.getId());
         row.setOriginalDecision(LoanLifecycleStatus.APPROVED.name());
@@ -238,7 +234,7 @@ class LoanFinalizationOverrideTest {
                         && o.getLoanApplicationId().equals(loan.getId()))
                 .count();
         assertThat(count).isLessThanOrEqualTo(2);
-        // The outbox should contain at least one LoanFinalized for the rejection.
+
         long finalizedCount = outboxRepo.findAll().stream()
                 .map(OutboxEvent::getEventType)
                 .filter("LoanFinalized"::equals)

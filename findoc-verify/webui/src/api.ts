@@ -10,8 +10,7 @@ export function clearApiKey() {
   localStorage.removeItem(KEY_STORAGE);
 }
 
-// In dev, paths stay relative and Vite's proxy forwards /api → localhost:8000.
-// In prod, set VITE_API_URL to the full origin (e.g. http://EIP:8000) at build time.
+
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {

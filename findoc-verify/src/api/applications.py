@@ -334,9 +334,6 @@ async def list_applications(
         ).scalars():
             overrides_by_app.setdefault(o.application_id, o)
 
-        # Latest pipeline_run.started_at per app — if a replay started after
-        # the most recent override, the replay's report supersedes the override.
-        # Workers don't stamp completed_at so started_at is the freshest signal.
         latest_run_at_by_app: dict[uuid.UUID, _datetime] = dict(
             (await session.execute(
                 select(PipelineRun.application_id, func.max(PipelineRun.started_at))
@@ -568,10 +565,6 @@ async def stream_document(
     try:
         data = get_storage().get_document(doc.file_key)
     except ClientError as e:
-        # Stale row whose file_key no longer exists in object storage —
-        # typical after a LocalStack restart with PERSISTENCE off. Surface
-        # 410 Gone so the UI can render a clear "file no longer in storage"
-        # message instead of a generic 500.
         code = e.response.get("Error", {}).get("Code")
         if code in ("NoSuchKey", "404"):
             raise HTTPException(

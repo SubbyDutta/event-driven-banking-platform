@@ -6,7 +6,7 @@ from imblearn.over_sampling import SMOTE
 from xgboost import XGBClassifier
 import joblib
 
-AMOUNT_THRESHOLD = 50_000        
+AMOUNT_THRESHOLD = 50_000
 BALANCE_EXEMPTION = 60_000
 AVG_AMOUNT_EXEMPTION = 50_000
 RELATIVE_TO_BALANCE_MULT = 1.2
@@ -14,7 +14,7 @@ RELATIVE_TO_AVG_MULT = 3.0
 RANDOM_FRAUD_RATE = 0.01
 
 
-CRITICAL_BALANCE_MULT = 0.5    
+CRITICAL_BALANCE_MULT = 0.5
 np.random.seed(42)
 N = 2_000_000
 n_users = 20_000

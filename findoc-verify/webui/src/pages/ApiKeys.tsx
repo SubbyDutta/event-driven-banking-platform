@@ -168,8 +168,8 @@ export default function ApiKeys() {
         {minted && (
           <div
             style={{
-              background: "rgba(45,95,63,0.04)",
-              border: "1px solid rgba(45,95,63,0.2)",
+              background: "rgba(45,110,107,0.04)",
+              border: "1px solid rgba(45,110,107,0.2)",
               borderLeft: "3px solid var(--positive)",
               borderRadius: 2,
               padding: 18,

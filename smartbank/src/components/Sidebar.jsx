@@ -3,8 +3,7 @@ import React from 'react';
 function formatDisplayName(name) {
   if (!name) return 'User';
   const idx = name.indexOf('_');
-  if (idx > 0 && idx <= 12) return name.slice(0, idx);
-  if (name.length > 13) return name.slice(0, 12) + '…';
+  if (idx > 0 && idx <= 16) return name.slice(0, idx);
   return name;
 }
 

@@ -101,7 +101,6 @@ async def test_claim_returns_RETRY_for_failed_under_max(consumer, session_factor
     state = await consumer._claim(uuid.uuid4())
 
     assert state == "RETRY"
-    # Three executes: INSERT (insert), SELECT (refetch), UPDATE (state→PENDING + attempts++)
     assert session.execute.await_count == 3
 
 

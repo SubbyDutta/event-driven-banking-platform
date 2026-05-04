@@ -117,7 +117,6 @@ function InfoIcon() {
   );
 }
 
-// ---------------- Confirm Dialog (promise-based) ----------------
 
 type ConfirmOpts = {
   title: string;

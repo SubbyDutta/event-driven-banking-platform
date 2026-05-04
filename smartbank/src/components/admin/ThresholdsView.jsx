@@ -9,7 +9,7 @@ export default function ThresholdsView() {
   const [busy, setBusy] = useState({});
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [reasonPrompt, setReasonPrompt] = useState(null); // { key, value, reason }
+  const [reasonPrompt, setReasonPrompt] = useState(null);
 
   const load = async () => {
     setLoading(true);

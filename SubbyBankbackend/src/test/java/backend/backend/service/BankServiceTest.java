@@ -69,7 +69,7 @@ class BankServiceTest {
         senderAcct = bankRepo.save(senderAcct);
         receiverAcct = bankRepo.save(receiverAcct);
 
-        // Echo back the input transaction with an id assigned (mimicking save).
+
         when(transactionService.checkFraud(any(Transaction.class)))
                 .thenAnswer(inv -> {
                     Transaction t = inv.getArgument(0);

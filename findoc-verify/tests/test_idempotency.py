@@ -96,14 +96,12 @@ def _empty_file_bundle() -> dict:
     }
 
 
-# ---------- Case 1: replay hits an already-created row ----------
-
 @pytest.mark.asyncio
 async def test_idempotent_replay_returns_200_and_does_not_create():
     existing = _make_app("test-001")
     session = _make_session([
-        _FakeResult(scalar_one_or_none=existing),  # existence lookup
-        _FakeResult(scalar=5),                     # doc count for response
+        _FakeResult(scalar_one_or_none=existing),
+        _FakeResult(scalar=5),
     ])
     response = Response()
 
@@ -120,20 +118,17 @@ async def test_idempotent_replay_returns_200_and_does_not_create():
     assert result.applicationId == existing.id
     assert result.externalId == "test-001"
     assert result.documentsAccepted == 5
-    # Must not have created, committed, or rolled back.
     session.commit.assert_not_awaited()
     session.rollback.assert_not_awaited()
 
-
-# ---------- Case 2: race — IntegrityError on insert, fall back to existing ----------
 
 @pytest.mark.asyncio
 async def test_concurrent_race_returns_200_with_replay_flag(monkeypatch):
     existing = _make_app("test-002")
     session = _make_session([
-        _FakeResult(scalar_one_or_none=None),  # first dedup lookup misses (race)
-        _FakeResult(scalar_one=existing),      # refetch after IntegrityError
-        _FakeResult(scalar=0),                 # doc count for response
+        _FakeResult(scalar_one_or_none=None),
+        _FakeResult(scalar_one=existing),
+        _FakeResult(scalar=0),
     ])
 
     async def _raise_integrity(*_a, **_kw):
@@ -157,11 +152,8 @@ async def test_concurrent_race_returns_200_with_replay_flag(monkeypatch):
     session.commit.assert_not_awaited()
 
 
-# ---------- Case 3: no external_id → skip dedup path entirely ----------
-
 @pytest.mark.asyncio
 async def test_missing_external_id_skips_dedup_lookup():
-    # Session.execute must NOT be called before validation rejects the submission.
     session = MagicMock()
     session.execute = AsyncMock(side_effect=AssertionError(
         "idempotency lookup must not run when external_id is empty"
@@ -173,13 +165,11 @@ async def test_missing_external_id_skips_dedup_lookup():
     result = await submit_loan(
         response=response,
         applicant_name="x", email="x@x", phone="1",
-        external_id="",                  # empty → no dedup
-        **_empty_file_bundle(),          # empty bundle → validation fails fast
+        external_id="",
+        **_empty_file_bundle(),
         auth=_auth(), session=session,
     )
 
-    # Validation error comes out as a 400 JSONResponse; the key assertion
-    # is that session.execute was never awaited (assertion side_effect proves it).
     assert isinstance(result, JSONResponse)
     assert result.status_code == 400
     session.execute.assert_not_awaited()
