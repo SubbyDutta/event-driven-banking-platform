@@ -8,6 +8,13 @@
 
 import type { ReactNode } from "react";
 
+const safeJoin = (v: any, sep = ", "): string => {
+  if (Array.isArray(v)) return v.join(sep);
+  if (v == null) return "";
+  return String(v);
+};
+const safeArr = <T,>(v: any): T[] => (Array.isArray(v) ? (v as T[]) : []);
+
 // ---------------- Public titles + descriptions ----------------
 
 const TITLES: Record<string, { title: string; what: string }> = {
@@ -116,15 +123,15 @@ export function ruleHeadline(name: string, status: string, d: any): string {
         : `ITR assessment year ${d?.year ?? "?"} is too old (current ${d?.current_year ?? "?"}).`;
     case "payslip_period_coverage":
       return status === "pass"
-        ? `${(d?.months ?? []).length} consecutive months covered.`
-        : `Missing months — found ${(d?.found_months ?? []).join(", ")}, required ${(d?.required ?? []).join(", ")}.`;
+        ? `${(Array.isArray(d?.months) ? d.months : []).length} consecutive months covered.`
+        : `Missing months — found ${safeJoin(d?.found_months)}, required ${safeJoin(d?.required)}.`;
     case "bank_period_coverage":
       return status === "pass"
-        ? `${(d?.months ?? []).length} consecutive months covered.`
-        : `Missing months — found ${(d?.found_months ?? []).join(", ")}, required ${(d?.required ?? []).join(", ")}.`;
+        ? `${(Array.isArray(d?.months) ? d.months : []).length} consecutive months covered.`
+        : `Missing months — found ${safeJoin(d?.found_months)}, required ${safeJoin(d?.required)}.`;
     case "payslip_vs_bank_salary": {
-      const rows = d?.per_month ?? [];
-      const bad = rows.filter((r: any) => !r.pass).length;
+      const rows = safeArr<any>(d?.per_month);
+      const bad = rows.filter((r: any) => !r?.pass).length;
       if (status === "pass") return `All ${rows.length} months reconcile within tolerance.`;
       return `${bad} of ${rows.length} months do not reconcile within 5% tolerance.`;
     }
@@ -174,16 +181,16 @@ export function ruleHeadline(name: string, status: string, d: any): string {
       return `Lowest employer-name match ${pct(d?.min)} · average ${pct(d?.avg)}.`;
     case "period_overlap":
       return status === "pass"
-        ? `Months covered: ${(d?.months ?? []).join(", ")}.`
-        : `${(d?.payslip_months_missing_in_bank ?? []).length} payslip month(s) have no matching bank statement.`;
+        ? `Months covered: ${safeJoin(d?.months)}.`
+        : `${safeArr(d?.payslip_months_missing_in_bank).length} payslip month(s) have no matching bank statement.`;
     case "payslip_bank_amount": {
-      const rows = d?.per_month ?? [];
-      const bad = rows.filter((r: any) => !r.pass).length;
+      const rows = safeArr<any>(d?.per_month);
+      const bad = rows.filter((r: any) => !r?.pass).length;
       if (status === "pass") return `All ${rows.length} months reconcile.`;
       return `${bad} of ${rows.length} months differ by more than 5%.`;
     }
     case "annualised_income_match": {
-      const probs = d?.problems ?? [];
+      const probs = safeArr<any>(d?.problems);
       return status === "pass"
         ? `Annualised income agrees: payslips ${inr(d?.annual_payslip)}, ITR ${inr(d?.annual_itr)}, bank ${inr(d?.annual_bank)}.`
         : `${probs.length} source${probs.length === 1 ? "" : "s"} disagree by more than 20%.`;
@@ -307,8 +314,8 @@ export function RuleDetails({ name, status, details }: {
   }
 
   if (name === "period_overlap") {
-    const months = (d.months ?? []) as string[];
-    const missing = (d.payslip_months_missing_in_bank ?? []) as string[];
+    const months = safeArr<string>(d.months);
+    const missing = safeArr<string>(d.payslip_months_missing_in_bank);
     return (
       <DetailWrap>
         {months.length > 0 && <KV label="Months covered" value={months.join(", ")} mono />}
@@ -325,8 +332,8 @@ export function RuleDetails({ name, status, details }: {
   }
 
   if (name === "payslip_period_coverage" || name === "bank_period_coverage") {
-    const found = (d.months ?? d.found_months ?? []) as string[];
-    const required = (d.required ?? []) as string[];
+    const found = safeArr<string>(d.months ?? d.found_months);
+    const required = safeArr<string>(d.required);
     return (
       <DetailWrap>
         <KV label="Months found" value={found.length ? found.join(", ") : "—"} mono />
