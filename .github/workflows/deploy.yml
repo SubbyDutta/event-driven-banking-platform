@@ -1,0 +1,63 @@
+name: Deploy
+
+# Auto-deploys to EC2 on push to main, ONLY after CI passes.
+# Manually triggerable via "Run workflow" button (workflow_dispatch).
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    # Skip if CI failed (only matters for workflow_run triggers).
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            cd $HOME/subby
+
+            echo "=== Saving rollback point ==="
+            PREV_SHA=$(git rev-parse HEAD)
+            echo "Previous: $PREV_SHA"
+
+            echo "=== Pulling latest ==="
+            git fetch --all
+            git reset --hard origin/main
+            NEW_SHA=$(git rev-parse HEAD)
+            echo "Deploying: $NEW_SHA"
+
+            echo "=== Building (sequential to fit t3.small RAM) ==="
+            docker compose --env-file .env.aws -f docker-compose.aws.yml build subby-bank
+            docker compose --env-file .env.aws -f docker-compose.aws.yml build findoc-verify
+            docker compose --env-file .env.aws -f docker-compose.aws.yml build subby-python-loan
+
+            echo "=== Rolling restart ==="
+            docker compose --env-file .env.aws -f docker-compose.aws.yml up -d --remove-orphans
+
+            echo "=== Waiting 60s for healthchecks to settle ==="
+            sleep 60
+            docker compose --env-file .env.aws -f docker-compose.aws.yml ps
+
+            echo "=== Smoke testing endpoints ==="
+            curl -fsS http://localhost:8080/actuator/health || (echo "BANK UNHEALTHY"  && exit 1)
+            curl -fsS http://localhost:8000/api/v1/health   || (echo "FINDOC UNHEALTHY" && exit 1)
+            curl -fsS http://localhost:8002/health          || (echo "LOAN UNHEALTHY"   && exit 1)
+
+            echo "=== Pruning old images ==="
+            docker image prune -f
+
+            echo "=== Deploy succeeded: $NEW_SHA ==="
