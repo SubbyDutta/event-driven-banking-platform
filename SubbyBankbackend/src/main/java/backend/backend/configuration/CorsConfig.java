@@ -4,8 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,8 +16,15 @@ public class CorsConfig {
     @Value("${frontend.url:}")
     private String frontendUrl;
 
+    /**
+     * Exposed as CorsConfigurationSource (not a CorsFilter bean) so SecurityConfig
+     * can pick it up via http.cors(withDefaults()). With a plain CorsFilter, the
+     * security filter chain rejects OPTIONS preflights with 401 before CORS
+     * headers are applied — which surfaces in the browser as
+     * "No 'Access-Control-Allow-Origin' header is present" on every protected route.
+     */
     @Bean
-    public CorsFilter corsFilter() {
+    public CorsConfigurationSource corsConfigurationSource() {
         List<String> origins = new ArrayList<>(List.of(
                 "http://localhost:3000",
                 "http://localhost:5173"
@@ -36,6 +43,6 @@ public class CorsConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cfg);
-        return new CorsFilter(source);
+        return source;
     }
 }
