@@ -1,0 +1,128 @@
+name: subby-aws
+
+x-restart: &restart
+  restart: on-failure:5
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: subby-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [subby-net]
+    <<: *restart
+
+  subby-bank:
+    build:
+      context: ./SubbyBankbackend
+      dockerfile: Dockerfile
+    container_name: subby-bank
+    env_file: .env.aws
+    environment:
+      SPRING_PROFILES_ACTIVE: aws
+    ports: ["8080:8080"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    networks: [subby-net]
+    <<: *restart
+
+  findoc-verify:
+    build:
+      context: ./findoc-verify
+      dockerfile: Dockerfile
+    container_name: findoc-verify
+    env_file: .env.aws
+    environment:
+      DATABASE_URL: ${FINDOC_DATABASE_URL}
+      ALEMBIC_DATABASE_URL: ${FINDOC_ALEMBIC_DATABASE_URL}
+      POSTGRES_USER: ${FINDOC_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${FINDOC_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${FINDOC_POSTGRES_DB}
+    volumes:
+      - ./secrets/google-sa.json:/app/secrets/google-sa.json:ro
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [subby-net]
+    <<: *restart
+
+  findoc-verify-workers:
+    build:
+      context: ./findoc-verify
+      dockerfile: Dockerfile
+    container_name: findoc-verify-workers
+    env_file: .env.aws
+    environment:
+      DATABASE_URL: ${FINDOC_DATABASE_URL}
+      ALEMBIC_DATABASE_URL: ${FINDOC_ALEMBIC_DATABASE_URL}
+      POSTGRES_USER: ${FINDOC_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${FINDOC_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${FINDOC_POSTGRES_DB}
+    volumes:
+      - ./secrets/google-sa.json:/app/secrets/google-sa.json:ro
+    command: ["python", "-m", "src.workers.run_all"]
+    depends_on:
+      findoc-verify:
+        condition: service_healthy
+    networks: [subby-net]
+    <<: *restart
+
+  subby-python-loan:
+    build:
+      context: ./SubbyPythonLoan
+      dockerfile: Dockerfile
+    container_name: subby-python-loan
+    env_file: .env.aws
+    environment:
+      DATABASE_URL: ${SUBBY_LOAN_DATABASE_URL}
+      ALEMBIC_DATABASE_URL: ${SUBBY_LOAN_ALEMBIC_DATABASE_URL}
+      SQS_QUEUE: ${SUBBY_LOAN_SQS_QUEUE}
+      SNS_TOPIC_RESULT: ${SUBBY_LOAN_SNS_TOPIC_RESULT}
+      MODEL_VERSION: ${SUBBY_LOAN_MODEL_VERSION}
+      POD_APPROVE_THRESHOLD: ${SUBBY_LOAN_POD_APPROVE_THRESHOLD}
+      POD_REJECT_THRESHOLD: ${SUBBY_LOAN_POD_REJECT_THRESHOLD}
+    ports: ["8002:8000"]
+    command: >
+      bash -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks: [subby-net]
+    <<: *restart
+
+  fraud-python:
+    build:
+      context: ./FraudPython
+      dockerfile: Dockerfile
+    container_name: fraud-python
+    ports: ["8001:8001"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\", timeout=3)'"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [subby-net]
+    <<: *restart
+
+networks:
+  subby-net:
+    name: subby-net
+    driver: bridge
