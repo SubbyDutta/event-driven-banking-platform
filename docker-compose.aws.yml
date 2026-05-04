@@ -61,9 +61,9 @@ services:
     <<: *restart
 
   findoc-verify-workers:
-    build:
-      context: ./findoc-verify
-      dockerfile: Dockerfile
+    # Reuse the image built by the findoc-verify service above — same code,
+    # different command. Skips a duplicate ~5 min pip-install on every deploy.
+    image: subby-aws-findoc-verify
     container_name: findoc-verify-workers
     env_file: .env.aws
     environment:
@@ -107,20 +107,11 @@ services:
     networks: [subby-net]
     <<: *restart
 
-  fraud-python:
-    build:
-      context: ./FraudPython
-      dockerfile: Dockerfile
-    container_name: fraud-python
-    ports: ["8001:8001"]
-    healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\", timeout=3)'"]
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-    networks: [subby-net]
-    <<: *restart
+  # fraud-python intentionally disabled in AWS deploy — t3.small can't fit it
+  # alongside SubbyPythonLoan + Spring Boot + findoc-verify + workers + redis.
+  # Spring Boot's FraudClient applies DEGRADED mode (low-value transfers
+  # allowed, high-value rejected) when fraud-python is unreachable.
+  # See FraudClient.java for the fallback policy.
 
 networks:
   subby-net:
