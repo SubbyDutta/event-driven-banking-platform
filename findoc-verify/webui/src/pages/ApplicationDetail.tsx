@@ -750,6 +750,7 @@ function FieldsList({ fields, appId, documentId, onEdited }: {
 }) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const filtered = useMemo(() => {
     if (!query) return fields;
@@ -761,7 +762,19 @@ function FieldsList({ fields, appId, documentId, onEdited }: {
     return (
       <div style={{ padding: 32, textAlign: "center", color: "var(--muted)" }}>
         <div className="fv-h-section" style={{ fontSize: 14, marginBottom: 4, color: "var(--ink)" }}>No fields extracted</div>
-        <div style={{ fontSize: 12 }}>The classifier didn't find structured fields in this document.</div>
+        <div style={{ fontSize: 12, marginBottom: 12 }}>The classifier didn't find structured fields in this document. Add them manually below, then replay the pipeline.</div>
+        {adding ? (
+          <FieldNewRow
+            appId={appId}
+            documentId={documentId}
+            onCancel={() => setAdding(false)}
+            onSaved={() => { setAdding(false); onEdited(); }}
+          />
+        ) : (
+          <button onClick={() => setAdding(true)} className="fv-btn-inline" style={{ marginTop: 4 }}>
+            + Add field
+          </button>
+        )}
       </div>
     );
   }
@@ -776,9 +789,25 @@ function FieldsList({ fields, appId, documentId, onEdited }: {
             placeholder="Search fields…"
           />
         </div>
+        <button
+          onClick={() => setAdding(true)}
+          className="fv-btn-inline"
+          style={{ marginLeft: 8 }}
+          disabled={adding}
+        >
+          + Add field
+        </button>
       </div>
       <div className="fv-doc-fields-body">
-        {filtered.length === 0 && (
+        {adding && (
+          <FieldNewRow
+            appId={appId}
+            documentId={documentId}
+            onCancel={() => setAdding(false)}
+            onSaved={() => { setAdding(false); onEdited(); }}
+          />
+        )}
+        {filtered.length === 0 && !adding && (
           <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--muted)" }}>
             No fields match "{query}"
           </div>
@@ -803,6 +832,73 @@ function FieldsList({ fields, appId, documentId, onEdited }: {
         ))}
       </div>
     </>
+  );
+}
+
+function FieldNewRow({ appId, documentId, onCancel, onSaved }: {
+  appId: string; documentId: string; onCancel: () => void; onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    const fname = name.trim();
+    if (fname.length < 1) { setErr("Field name required"); return; }
+    if (reason.trim().length < 3) { setErr("Reason required (min 3 chars)"); return; }
+    setBusy(true); setErr(null);
+    try {
+      await api.patchExtractedField(appId, fname, value, reason.trim(), documentId);
+      toast.success("Field added", `${prettyFieldName(fname)} → "${value}". Replay to re-evaluate.`);
+      onSaved();
+    } catch (e: any) {
+      setErr(e?.message || "add failed");
+      toast.error("Add failed", e?.message);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="fv-field-row editing">
+      <div className="top">
+        <span className="fv-tag warn" style={{ fontSize: 10 }}>
+          <span className="dot" />
+          adding
+        </span>
+      </div>
+      <div className="fv-field-edit" style={{ display: "grid", gap: 6 }}>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="value-input"
+          placeholder="field name (e.g. monthly_income)"
+          autoFocus
+        />
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="value-input"
+          placeholder="value"
+        />
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Reason (audit trail) — min 3 chars"
+          className="reason-input"
+        />
+        {err && <div className="fv-alert error" style={{ fontSize: 11, padding: "8px 12px" }}>{err}</div>}
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={save} disabled={busy} className="fv-btn-inline">
+            {busy ? "Saving…" : "Save"}
+          </button>
+          <button onClick={onCancel} disabled={busy} className="fv-btn-inline">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
