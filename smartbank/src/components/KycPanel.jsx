@@ -47,6 +47,10 @@ export default function KycPanel({ initialStatus, onApproved }) {
   const inFlight = status === 'KYC_SUBMITTED' || status === 'KYC_DOCS_UNDER_REVIEW';
   const needsUpload = status === 'NONE' || status === 'KYC_REJECTED';
 
+  const onApprovedRef = useRef(onApproved);
+  useEffect(() => { onApprovedRef.current = onApproved; }, [onApproved]);
+  const firedApprovedRef = useRef(status === 'KYC_APPROVED');
+
   useEffect(() => {
     if (!inFlight) return;
     pollRef.current = setInterval(refresh, 5000);
@@ -55,8 +59,11 @@ export default function KycPanel({ initialStatus, onApproved }) {
   }, [inFlight]);
 
   useEffect(() => {
-    if (status === 'KYC_APPROVED' && typeof onApproved === 'function') onApproved();
-  }, [status, onApproved]);
+    if (status !== 'KYC_APPROVED') return;
+    if (firedApprovedRef.current) return;
+    firedApprovedRef.current = true;
+    if (typeof onApprovedRef.current === 'function') onApprovedRef.current();
+  }, [status]);
 
   async function refresh() {
     try {
