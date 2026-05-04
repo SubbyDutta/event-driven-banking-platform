@@ -34,6 +34,18 @@ export default function KycUsersView() {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
+  const [findocKey, setFindocKey] = useState("");
+
+  useEffect(() => {
+    API.get("/admin/findoc-key")
+      .then((r) => setFindocKey(r.data?.key || ""))
+      .catch(() => setFindocKey(""));
+  }, []);
+
+  function buildInspectUrl(applicationId) {
+    const base = `${FINDOC_WEBUI}/app/${applicationId}`;
+    return findocKey ? `${base}#key=${encodeURIComponent(findocKey)}` : base;
+  }
 
   async function load() {
     setLoading(true);
@@ -238,7 +250,7 @@ export default function KycUsersView() {
                     <td className="right">
                       {u.findocKycApplicationId ? (
                         <a
-                          href={`${FINDOC_WEBUI}/app/${u.findocKycApplicationId}`}
+                          href={buildInspectUrl(u.findocKycApplicationId)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className={`sb-admin-review-link${isRejected ? " danger" : ""}`}

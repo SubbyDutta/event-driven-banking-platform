@@ -49,9 +49,10 @@ const RECO_TONE = {
   MANUAL_REVIEW: "warn",
 };
 
-function inspectHref(loan) {
+function inspectHref(loan, findocKey) {
   if (!loan?.findocLoanApplicationId || !FINDOC_ADMIN_URL) return null;
-  return `${FINDOC_ADMIN_URL}/app/${loan.findocLoanApplicationId}`;
+  const base = `${FINDOC_ADMIN_URL}/app/${loan.findocLoanApplicationId}`;
+  return findocKey ? `${base}#key=${encodeURIComponent(findocKey)}` : base;
 }
 
 function gradeFromBand(band) {
@@ -71,7 +72,14 @@ export default function LoanReviewView() {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [quickOverride, setQuickOverride] = useState(null);
+  const [findocKey, setFindocKey] = useState("");
   const loadRef = useRef(null);
+
+  useEffect(() => {
+    API.get("/admin/findoc-key")
+      .then((r) => setFindocKey(r.data?.key || ""))
+      .catch(() => setFindocKey(""));
+  }, []);
 
   const load = async (pageOverride) => {
     const p = pageOverride ?? page;
@@ -268,6 +276,7 @@ export default function LoanReviewView() {
                   <td>
                     <RowActions
                       loan={l}
+                      findocKey={findocKey}
                       onApprove={() => setQuickOverride({
                         loan: l, decision: "APPROVE",
                         rate: l.interestRate ? String(l.interestRate) : "",
@@ -378,8 +387,8 @@ function MlResultCell({ loan }) {
   );
 }
 
-function RowActions({ loan, onApprove, onReject }) {
-  const href = inspectHref(loan);
+function RowActions({ loan, onApprove, onReject, findocKey }) {
+  const href = inspectHref(loan, findocKey);
 
   const goToFindoc = (e) => {
     if (!href) return;
