@@ -7,6 +7,7 @@ import NewSubmission from "./pages/NewSubmission";
 import ApplicationDetail from "./pages/ApplicationDetail";
 import ApiKeys from "./pages/ApiKeys";
 import AuditLog from "./pages/AuditLog";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { me, loading } = useAuth();
@@ -28,7 +29,7 @@ export default function App() {
           <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
             <Route index element={<Dashboard />} />
             <Route path="new/:kind" element={<NewSubmission />} />
-            <Route path="app/:id" element={<ApplicationDetail />} />
+            <Route path="app/:id" element={<ErrorBoundary><ApplicationDetail /></ErrorBoundary>} />
             <Route path="admin/keys" element={<ApiKeys />} />
             <Route path="admin/audit-log" element={<AuditLog />} />
           </Route>
