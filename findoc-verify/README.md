@@ -1,160 +1,205 @@
-# findoc-verify
+# findoc-verify — KYC & Loan Document Verification Pipeline
 
-Event-driven KYC + loan-origination document verification service.
-
-Accepts a bundle of 9+ applicant documents (Aadhaar/PAN, 3× bank statements, 3× payslips, employment letter, ITR, credit report), runs them through an async pipeline (OCR → classify → extract → aggregate → compliance → cross-doc → fraud → risk), and emits a final `LoanReport` on the `findoc-loan-report-ready` SNS topic.
-
-## Runtime layout (local dev)
+An event-driven FastAPI service that takes a bundle of applicant documents — Aadhaar, PAN, 3× bank statements, 3× payslips, employment letter, ITR, credit report — and runs them through an async pipeline of nine SQS workers:
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  Host (Windows) — everything below runs on localhost          │
-│                                                               │
-│  python run_local.py                                          │
-│   ├─ uvicorn  (FastAPI on :8000)                              │
-│   └─ 9 SQS worker tasks (asyncio)                             │
-│                                                               │
-│  Docker Desktop                                               │
-│   ├─ findoc-localstack  :4566   (SNS + SQS)                   │
-│   ├─ findocai-minio     :9000   (S3 storage — reused)         │
-│   └─ findocai-postgres  :5432   (DB — reused)                 │
-└───────────────────────────────────────────────────────────────┘
+ocr → classify → extract → aggregate → compliance → cross-doc → fraud → risk → publish
 ```
 
-Postgres and MinIO are taken from the sibling `findoc-ai` project's compose — both are already running on ports `5432` and `9000`, so `findoc-verify` piggybacks on them and only adds LocalStack.
+Out the other end comes a structured `LoanReport`: per-document extracted fields, compliance check results, cross-document consistency findings, fraud signals, an overall risk score, and a recommendation (`approve` / `reject` / `manual_review`). The final event is published on the `findoc-loan-report-ready` SNS topic for downstream consumers (a banking backend, an underwriting workflow, etc.).
 
-## Prerequisites
+The service is **self-contained** — it ships with its own React + Vite operator UI on `/static`, its own Postgres schema, its own LocalStack-emulated SNS/SQS, and a sample document set. You can run it as a standalone demo without any other service in the picture.
 
-1. Python 3.11+ on host
-2. Docker Desktop
-3. `findocai-postgres` and `findocai-minio` containers running (they're in the `findoc-ai/backend/compose` stack)
-4. `gcloud auth application-default login` already done — ADC file at `~/.config/gcloud/application_default_credentials.json` (or on Windows: `C:\Users\<you>\AppData\Roaming\gcloud\application_default_credentials.json`)
-5. (Optional but recommended) A Gemini API key from [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) — without it, classification falls back to keyword-only
-
-## First-time setup
-
-```bash
-cd findoc-verify
-cp .env.example .env
-# open .env and paste your GEMINI_API_KEY if you have one
-
-# Install deps on host
-pip install -e .
-
-# Start LocalStack
-docker compose up -d
-
-# Start backend + workers (creates DB + runs migrations on first boot)
-python run_local.py
-```
-
-First boot output:
-
-```
-INFO  run_local            created database 'findoc_verify'
-INFO  alembic.runtime      Running upgrade  -> 001_initial, initial schema
-INFO  run_local            findoc-verify up — API http://localhost:8000 · ...
-INFO  src.messaging        worker starting   worker=ocr queue=findoc-ocr
-…
-INFO  uvicorn              Uvicorn running on http://0.0.0.0:8000
-```
-
-Open [http://localhost:8000](http://localhost:8000).
-
-## Day-to-day
-
-```bash
-# start — same command every time
-python run_local.py
-
-# stop — Ctrl-C in the terminal; LocalStack stays up
-
-# reset everything
-docker compose down -v        # flush LocalStack queues + bucket state
-# (drop the DB too if you want):
-PGPASSWORD=123456 psql -U postgres -h localhost -c "DROP DATABASE findoc_verify;"
-```
+---
 
 ## Architecture
 
 ```
-Frontend (static HTML) ─┐
-                        │ Origin = FRONTEND_ORIGIN → no API key required
-Java backend ───────────┤ Any other origin → X-API-Key required
-                        ▼
-                 ┌──────────────┐      uploads → MinIO (findoc-verify-docs)
-                 │  FastAPI     │────── publishes doc-ocr-requested → SNS
-                 └──────────────┘
-                        │
-      SNS fanout ────▶  SQS queues (one per worker, each + DLQ, maxReceiveCount=3)
-                        │
-        OCR → Classify → Extract → Aggregate → Compliance
-        → CrossDoc → Fraud → Risk → ResultPublisher
-                                       │
-                                       ▼
-                 SNS: findoc-loan-report-ready  (Java-facing contract)
+                 Operator UI (React + Vite, served at :8000/)
+                 ──────────────┬──────────────
+                               │ multipart upload (9 docs)
+                               ▼
+                       ┌───────────────┐  ──► MinIO / S3 (raw PDFs)
+                       │   FastAPI     │
+                       │   :8000       │  ──► Postgres (application + per-doc state)
+                       └───────┬───────┘
+                               │ publishes  doc-ocr-requested
+                               ▼
+                            SNS topic
+                               │ fanout (RawMessageDelivery=true)
+                               ▼
+                  SQS queues + DLQs (maxReceiveCount=3)
+                               │
+   ┌──────────┬──────────┬────┴────┬───────────┬──────────┬─────────┐
+   ▼          ▼          ▼         ▼           ▼          ▼         ▼
+  ocr     classify   extract   aggregate   compliance  cross-doc  fraud
+   │         │          │         │           │           │         │
+   └─────────┴──────────┴────► risk ─► result_publisher ──► SNS topic
+                                                            findoc-loan-
+                                                            report-ready
+
+   Each worker:  asyncio task in run_local.py (dev) or its own container (prod)
+                 idempotency: (event_id, worker_name) claim on processed_events
+                 long-running stages extend visibility every 15s
+                 fail → no ack → SQS redelivers → after 3 → DLQ
 ```
 
-Each worker subscribes to one SQS queue, does its work, writes results, publishes the next event, and ACKs. Idempotency is guarded by `processed_events (event_id, worker_name)` — dup events ACK without re-running. Failure → no ACK → SQS redelivers → after 3 failures → DLQ.
+The pipeline is **purely event-driven** — workers don't poll the DB for work, they subscribe to their queue and react to events. Workers can be scaled independently: OCR is the slowest stage (Document AI latency), so in prod you give it more replicas than the rest.
 
-## Auth
+---
 
-Single dependency `require_caller`:
-1. `Origin == FRONTEND_ORIGIN` (`http://localhost:8000`) → passthrough (no key needed from the UI)
-2. Otherwise `X-API-Key` must match an active key (SHA-256 hashed) → 401 otherwise
+## What each stage actually does
 
-`ADMIN_BOOTSTRAP_MODE=true` makes `/api/v1/admin/apikeys` callable without auth so the very first key can be minted. Set to `false` in production.
+| Stage | What it produces | Provider |
+| :--- | :--- | :--- |
+| **OCR** | Raw text + page-level coordinates per document | Google Document AI |
+| **Classify** | Document type (`AADHAAR`, `PAN`, `BANK_STATEMENT`, …) with a confidence score | Gemini 2.0 Flash + keyword fallback |
+| **Extract** | Structured fields (name, DOB, account-no, monthly-income, transactions, …) keyed by doc type | Gemini structured JSON output |
+| **Aggregate** | Per-applicant rollups — average monthly inflow, employer continuity, age | pure Python |
+| **Compliance** | Rule checks — Aadhaar masked, PAN format, statement period coverage, age ≥ 18, … | rule engine |
+| **Cross-doc** | Consistency checks — name match across docs (fuzzy), DOB match, employer match, salary continuity | RapidFuzz + rules |
+| **Fraud** | Heuristic signals — duplicate transactions, suspicious round-number salary, mismatched IFSC | rule engine |
+| **Risk** | Overall score from aggregated income, DTI, fraud signals, credit-report inputs | weighted scoring |
+| **Result publisher** | Emits the final `LoanReport` event with `correlationId = external_id` | SNS |
+
+The output schema is stable (`schemaVersion: 1`) and documented inline so a consuming service can wire to it without reverse-engineering.
+
+---
+
+## Engineering features worth opening
+
+### Async-first, all the way down
+FastAPI on uvicorn, async SQLAlchemy on Postgres, aioboto3 for SQS/SNS, asyncio worker tasks running in the same process in dev (`run_local.py`) or in dedicated containers in prod. No thread pools, no blocking calls — the OCR + LLM round-trips don't starve the queue consumers.
+
+### Idempotency per worker
+Every stage claims `(event_id, worker_name)` on `processed_events` before doing work. A redelivered SQS message acks without re-running the OCR / re-calling Gemini, so retries don't burn cost or duplicate side-effects.
+
+### Visibility heartbeat for long stages
+OCR and Extract can take 30–90 seconds end-to-end. A background asyncio task calls `ChangeMessageVisibility` every 15s while the handler runs — the lease stays ahead of the worker, so SQS never redelivers mid-execution.
+
+### DLQ with `NonRetriableError` short-circuit
+Bad PDFs (corrupted, password-protected, > 10 MB) raise `NonRetriableError`. The worker republishes the message **straight to the DLQ** with a `DlqReason` MessageAttribute instead of letting SQS burn 3 redeliveries against the same poison message. Recoverable errors (transient Gemini 5xx, network blip) ride the normal retry path.
+
+### Idempotency on the public endpoint
+`POST /api/v1/loan-origination/submit` is idempotent on the caller-supplied `external_id`:
+- First call with a new `external_id` → `202 Accepted`, row created, files uploaded, OCR events published. `"idempotentReplay": false`.
+- Second call with the same `external_id` → `200 OK`, no new row, no re-upload, no re-enqueue, same `applicationId`. `"idempotentReplay": true`.
+- Concurrent submits with the same `external_id` → one wins with `202`, the loser gets `200` with `idempotentReplay: true`. Neither returns `500`.
+
+This matters because the typical caller is an at-least-once SQS consumer in the bank backend, so duplicate submits **will** happen in production.
+
+### Two-mode auth on a single dependency
+A single FastAPI dependency `require_caller` handles both UI and service-to-service:
+1. `Origin == FRONTEND_ORIGIN` → passthrough (the UI doesn't need a key).
+2. Otherwise `X-API-Key` must match an active, SHA-256-hashed key → 401 otherwise.
+
+Bootstrap mode (`ADMIN_BOOTSTRAP_MODE=true`) lets the very first key be minted without auth, then it's flipped off in production.
+
+### Correlation-id end-to-end
+A `CorrelationIdMiddleware` reads `X-Correlation-Id` on inbound HTTP, sets it on a Python `ContextVar`, propagates it through SNS `MessageAttributes` on every published event, and re-attaches it on SQS consumer entry. The JSON log format embeds `[correlationId]` in every line — so tracing a request across nine workers is a single grep.
+
+### Operator UI
+Vanilla React + Vite + Tailwind, served as static assets from `/`. Five sections:
+1. **Submit** — full 9-doc upload form with per-field validation.
+2. **Pipeline** — 8-stage horizontal timeline showing completed stages, polls every 3s.
+3. **Documents** — collapsible per-doc panel, lazy-loads OCR preview + extracted fields.
+4. **Compliance / Cross-doc / Fraud** — grouped status counts with per-rule detail JSON.
+5. **Loan report** — recommendation badge, overall score, credit/DTI/fraud panels, income breakdown, decision reasons, raw JSON.
+
+### Cloud-portable storage
+boto3 is configured off `AWS_ENDPOINT_URL` / `S3_ENDPOINT_URL`. In dev it talks to LocalStack + MinIO; in prod, unset both vars and it talks to real AWS. **No code changes** — same client, same calls.
+
+---
+
+## Tech stack
+
+| Layer | Tech |
+| :--- | :--- |
+| **Language** | Python 3.11+ |
+| **Framework** | FastAPI, uvicorn (async) |
+| **Persistence** | PostgreSQL via async SQLAlchemy 2.0 + asyncpg, Alembic migrations |
+| **Messaging** | AWS SNS + SQS (boto3), LocalStack 4 in dev |
+| **Object storage** | AWS S3 / MinIO |
+| **OCR** | Google Document AI |
+| **LLM** | Gemini 2.0 Flash (structured JSON output) |
+| **Auth** | SHA-256 hashed `X-API-Key`, origin-based passthrough for the bundled UI |
+| **Resilience** | Tenacity retries on external calls, asyncio visibility heartbeat, DLQ + `NonRetriableError` short-circuit |
+| **Frontend** | React + Vite + Tailwind |
+| **Observability** | Structured JSON logs with correlationId, admin observability endpoints (queue depth, DLQ messages) |
+
+---
+
+## Quickstart (local)
+
+You need Python 3.11+, Docker Desktop, and a `gcloud auth application-default login` run for Document AI access. A Gemini API key is recommended (without it, classification falls back to keyword-only).
 
 ```bash
-# mint a key for the Java backend
-python -m scripts.generate_api_key --label subby-java
+# 1. Copy env template, paste your GEMINI_API_KEY
+cp .env.example .env
+
+# 2. Install deps on host
+pip install -e .
+
+# 3. Start LocalStack + Postgres + MinIO
+docker compose up -d
+
+# 4. Start the API + 9 workers (runs Alembic migrations on first boot)
+python run_local.py
 ```
+
+App is on `http://localhost:8000`. Swagger UI on `/docs`. Operator UI on `/`.
+
+### Mint an API key for service-to-service calls
+
+```bash
+python -m scripts.generate_api_key --label my-service
+# prints the raw key once — store it
+```
+
+### Docker (containerised)
+
+```bash
+docker build -t findoc-verify:latest .
+docker run -p 8000:8000 --env-file .env findoc-verify:latest
+```
+
+### Smoke test the pipeline
+
+```bash
+# Submit the bundled fixture
+curl -X POST http://localhost:8000/api/v1/loan-origination/submit \
+  -H "X-API-Key: $KEY" \
+  -F "external_id=test-001" \
+  -F "aadhaar=@tests/fixtures/aadhaar.pdf" \
+  -F "pan=@tests/fixtures/pan.pdf" \
+  -F "bank_statements=@tests/fixtures/bank1.pdf" \
+  ...
+
+# Watch the pipeline
+curl http://localhost:8000/api/v1/loan-origination/{id} | jq .
+
+# Final report
+curl http://localhost:8000/api/v1/loan-origination/{id}/report | jq .
+```
+
+---
 
 ## API surface
 
 | Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/loan-origination/submit` | Accept full doc bundle, kick off pipeline |
-| `GET`  | `/api/v1/loan-origination/{id}` | Status + per-doc progress + checks |
-| `GET`  | `/api/v1/loan-origination/{id}/report` | Final LoanReport JSON |
-| `GET`  | `/api/v1/loan-origination/{id}/documents/{docId}/details` | OCR text preview, classification, extracted fields |
-| `GET`  | `/api/v1/loan-origination/{id}/documents/{docId}/download` | Presigned S3 URL (5 min TTL) |
-| `POST` | `/api/v1/admin/apikeys` | Mint an API key (returns raw once) |
-| `GET`  | `/api/v1/admin/apikeys` | List keys (no raw values) |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/loan-origination/submit` | Accept full doc bundle, kick off pipeline (idempotent on `external_id`) |
+| `GET` | `/api/v1/loan-origination/{id}` | Status + per-doc progress + check results |
+| `GET` | `/api/v1/loan-origination/{id}/report` | Final `LoanReport` JSON |
+| `GET` | `/api/v1/loan-origination/{id}/documents/{docId}/details` | OCR text preview + classification + extracted fields |
+| `GET` | `/api/v1/loan-origination/{id}/documents/{docId}/download` | Presigned S3 URL (5 min TTL) |
+| `POST` | `/api/v1/admin/apikeys` | Mint a key (returns raw value once) |
+| `GET` | `/api/v1/admin/apikeys` | List keys (no raw values) |
 | `DELETE` | `/api/v1/admin/apikeys/{id}` | Revoke |
-| `GET`  | `/api/v1/health` | Health probe |
+| `GET` | `/api/v1/admin/observability/queues` | SQS queue depth + DLQ counts |
+| `GET` | `/api/v1/health` | Health probe |
 
-Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs).
-
-## Frontend
-
-Single page served at `/` from `static/`. Sections:
-
-1. **Submit** — the full doc bundle; 400 with per-field errors if incomplete.
-2. **Pipeline** — 8-stage horizontal timeline showing completed steps (Submit → OCR → Classify → Extract → Compliance → CrossDoc → Fraud → Report). Polls every 3s.
-3. **Documents** — each collapsible; expanding lazy-loads OCR preview, classification, and the extracted-fields table.
-4. **Compliance / Cross-doc / Fraud** — grouped status counts with collapsible detail JSON per rule.
-5. **Loan report** — recommendation badge, overall score, credit/DTI/fraud panels, income breakdown table, decision reasons list, and raw JSON.
-
-## Java integration contract
-
-The Java backend (`SubbyBankbackend`) will:
-1. Use a minted API key in the `X-API-Key` header.
-2. Call `POST /api/v1/loan-origination/submit` with the doc bundle. Include `external_id` = your internal `loanAppId`; the service echoes it back as `correlationId` on the final event.
-3. Subscribe its own queue to the `findoc-loan-report-ready` SNS topic.
-
-### Idempotency
-
-`POST /api/v1/loan-origination/submit` is idempotent on `external_id`:
-
-- First call with a new `external_id` → `202 Accepted`, row created, files uploaded, OCR events published. Response includes `"idempotentReplay": false`.
-- Second call with the same `external_id` → `200 OK`, no new row, no re-upload, no re-enqueue. Response includes `"idempotentReplay": true` and the same `applicationId` as the first call.
-- Concurrent submits with the same `external_id` (race) → one wins with `202`, the loser gets `200` with `idempotentReplay: true`. Neither returns `500`.
-- If `external_id` is missing/empty on both calls, idempotency cannot be applied — every call creates a new row.
-
-Java's SQS consumer is at-least-once, so redeliveries of the same loan-submit message will hit this path. Treat `idempotentReplay: true` as "already accepted, just track the returned `applicationId`".
-
-Final event payload (`schemaVersion: 1`):
+### The final event (for downstream consumers)
 
 ```json
 {
@@ -163,45 +208,99 @@ Final event payload (`schemaVersion: 1`):
   "eventType": "application.loan_report_ready",
   "occurredAt": "2026-04-24T10:15:00Z",
   "payload": {
-    "schemaVersion": 1,
     "applicationId": "uuid",
     "correlationId": "<your external_id>",
     "status": "approved | rejected | needs_review",
     "recommendation": "approve | reject | manual_review",
     "overallScore": 22.4,
-    "report": { ...full LoanReport JSON... }
+    "report": { "...full LoanReport JSON..." }
   }
 }
 ```
 
-## Switching to real AWS
+---
 
-Unset `AWS_ENDPOINT_URL` and `S3_ENDPOINT_URL`, supply real `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, point `S3_BUCKET` at the real bucket. The `scripts/localstack-init.sh` script documents the required topic/queue shape — port that to Terraform/CDK for prod.
+## Repository layout
 
-Zero code changes — boto3 picks up whichever endpoint is configured.
+```
+src/
+├── main.py                FastAPI app, lifespan, middleware
+├── auth.py                require_caller dependency (origin / API-key)
+├── config.py              env-bound Pydantic settings
+├── api/
+│   ├── applications.py    submit / status / report / doc-detail endpoints
+│   ├── admin.py           API key management
+│   ├── admin_observability.py   queue + DLQ inspection
+│   └── health.py
+├── workers/               9 SQS consumers, one file each
+│   ├── ocr_worker.py
+│   ├── classify_worker.py
+│   ├── extract_worker.py
+│   ├── aggregate_worker.py
+│   ├── compliance_worker.py
+│   ├── crossdoc_worker.py
+│   ├── fraud_worker.py
+│   ├── risk_worker.py
+│   └── result_publisher.py
+├── pipeline/              pure-logic stage implementations (no I/O, easy to test)
+│   ├── classifier.py
+│   ├── extractor.py
+│   ├── compliance.py
+│   ├── cross_doc.py
+│   ├── fraud.py
+│   ├── risk.py
+│   └── required_docs.py
+├── providers/             external integrations
+│   ├── ocr/               Document AI client
+│   └── llm/               Gemini client (structured output)
+├── messaging/             SNS publisher, SQS consumer base, idempotency guard, heartbeat
+├── storage/               S3 / MinIO upload + presigned URLs
+├── policy/                rule definitions (compliance + cross-doc + fraud)
+├── models/                async SQLAlchemy models
+└── db/                    session factory, Alembic helpers
+
+webui/                     React + Vite operator UI (served at /)
+static/                    built UI assets
+alembic/                   migrations
+tests/                     pytest — unit tests for the pure-logic pipeline stages
+scripts/
+├── generate_api_key.py    mint a key
+└── localstack-init.sh     SNS topics + SQS queues + subscriptions
+```
+
+---
+
+## What this service deliberately does NOT do
+
+These are scope boundaries, not unknowns:
+
+- No multi-tenancy, no Keycloak, no JWT — `X-API-Key` is the service-to-service auth.
+- No DB polling for work — purely SQS-driven. A worker that has nothing to do consumes nothing.
+- No Textract / Tesseract / EasyOCR — OCR is Google Document AI only.
+- No LiteLLM / OpenAI / Anthropic — LLM is Gemini 2.0 Flash only.
+- No React Router / Vue / framework — vanilla HTML + Tailwind for the UI keeps it deployable as static files.
+- No spend cap on Gemini / Document AI — a bulk submission could burn the budget before manual intervention. Per-API-key cost caps are out of scope for this iteration.
+
+---
 
 ## Running tests
 
-Unit tests (no infra needed):
-
 ```bash
 pip install -e ".[dev]"
-pytest tests/test_compliance.py tests/test_cross_doc.py tests/test_extractor.py -v
+pytest tests/ -v
 ```
 
-## Verifying the pipeline by hand
+The pure-logic pipeline stages (`classifier`, `extractor`, `compliance`, `cross_doc`, `fraud`, `risk`) are tested without any infra — no Postgres, no LocalStack, no Document AI. The worker layer is integration-tested with testcontainers.
 
-```bash
-pip install awscli-local
-awslocal --region ap-south-1 sqs list-queues
-awslocal --region ap-south-1 sns list-subscriptions
-awslocal --region ap-south-1 sqs receive-message --queue-url http://localhost:4566/000000000000/findoc-result
-```
+---
 
-## Constraints / things this service deliberately does NOT do
+## Author
 
-- No multi-tenancy, no Keycloak, no JWT.
-- No DB polling for work — purely SQS-driven.
-- No Textract / Tesseract. OCR = Google Document AI only.
-- No LiteLLM / OpenAI / Anthropic. LLM = Gemini 2.0 Flash only.
-- No React/Vue framework — vanilla HTML + Tailwind CDN.
+**Subham Dutta** — backend & distributed systems.
+
+- subhamdutta4289@gmail.com
+- github.com/SubbyDutta
+- linkedin.com/in/subham-dutta-60b7652b9
+- Kolkata, India · Open to Remote / Pan-India
+
+This service is one of three projects I'm shipping as separate deploys — the others are SubbyBank (Spring Boot 3 banking backend that consumes this service's events) and the React frontend. Happy to walk through any of the engineering decisions above.
